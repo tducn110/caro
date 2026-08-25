@@ -1,0 +1,10 @@
+{
+  "description": "Experience a modern web-based Caro game with a warm paper aesthetic, designed for casual play between friends or against AI, focusing on clean and engaging gameplay.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

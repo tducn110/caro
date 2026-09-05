@@ -13,7 +13,8 @@ vi.mock("pixi.js", async (importOriginal) => {
   };
 });
 
-import { CaroScene, CELL_SIZE } from "../../src/pixi/CaroScene";
+import { CaroScene } from "../../src/pixi/CaroScene";
+import { CELL_SIZE } from "../../src/board/spatial/CoordinateTransform";
 
 describe("CaroScene: Coordinate and Input Layer", () => {
   let scene: CaroScene;
@@ -35,9 +36,10 @@ describe("CaroScene: Coordinate and Input Layer", () => {
 
   it("screenToCell: converts screen coords to board correctly", () => {
     // Camera is initially at 400, 300 (center of 800x600)
-    expect(scene.camera.x).toBe(400);
-    expect(scene.camera.y).toBe(300);
-    expect(scene.camera.zoom).toBe(1);
+    const cameraState = scene.camera.snapshot();
+    expect(cameraState.x).toBe(400);
+    expect(cameraState.y).toBe(300);
+    expect(cameraState.zoom).toBe(1);
 
     // Clicking exactly at camera center (400, 300) should be row 0, col 0
     const centerCell = scene.screenToCell(400, 300);
@@ -66,9 +68,9 @@ describe("CaroScene: Coordinate and Input Layer", () => {
     // Simulate pointermove dragging 20px
     scene.app.stage.emit("pointermove", { global: { x: 420, y: 320 } });
     
-    expect(scene.isDragging).toBe(true);
-    expect(scene.camera.x).toBe(420); // 400 + 20
-    expect(scene.camera.y).toBe(320);
+    const cam = scene.camera.snapshot();
+    expect(cam.x).toBe(420); // 400 + 20
+    expect(cam.y).toBe(320);
 
     // Simulate pointerup
     scene.app.stage.emit("pointerup", { global: { x: 420, y: 320 } });
@@ -90,9 +92,9 @@ describe("CaroScene: Coordinate and Input Layer", () => {
     // Simulate pointerup (without move)
     scene.app.stage.emit("pointerup", { global: { x: 400, y: 300 } });
     
-    expect(scene.isDragging).toBe(false);
     expect(clickCount).toBe(1);
     expect(clickedCell).toEqual({ row: 0, col: 0 });
   });
 });
+
 

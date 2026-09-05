@@ -1,29 +1,35 @@
-import { Application, Container, Graphics, FederatedPointerEvent } from "pixi.js"
-import { GameState } from "../game/state"
-import { CameraState, Player } from "../game/types"
+import { Application, Container, FederatedPointerEvent, Graphics } from "pixi.js"
+import type { CellCoord, Player } from "../game/core/types"
+import { BoardInputController } from "../board/input/BoardInputController"
+import { Camera } from "../board/spatial/Camera"
+import { BoardCoordinateTransform } from "../board/spatial/CoordinateTransform"
+import { resolveVisibleBounds, type ViewportSize } from "../board/spatial/VisibleBounds"
+import { GridRenderer } from "../board/render/GridRenderer"
+import { HighlightRenderer } from "../board/render/HighlightRenderer"
+import { StoneRenderer } from "../board/render/StoneRenderer"
 
-export const CELL_SIZE = 56;
-const DRAG_THRESHOLD = 6;
+export interface BoardRenderStone { readonly cell: CellCoord; readonly player: Player }
 
 export class CaroScene {
-  app: Application;
-  world: Container;
-  gridLayer: Graphics;
-  stoneLayer: Container;
-  fxLayer: Graphics;
-  
-  camera: CameraState = { x: 0, y: 0, zoom: 1 };
-  
-  isDragging = false;
-  pointerDownPos = { x: 0, y: 0 };
-  pointerDownCamera = { x: 0, y: 0 };
-  isPointerDown = false;
-  
-  onCellClick?: (row: number, col: number) => void;
-  
-  stoneSprites: Map<string, Graphics> = new Map();
-  lastDrawnBounds = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
-  
+  readonly app: Application
+  readonly world: Container
+  readonly gridLayer: Graphics
+  readonly stoneLayer: Container
+  readonly fxLayer: Graphics
+  readonly camera = new Camera()
+  readonly coordinateTransform = new BoardCoordinateTransform()
+  readonly inputController = new BoardInputController(this.coordinateTransform)
+  readonly gridRenderer = new GridRenderer()
+  readonly stoneRenderer = new StoneRenderer()
+  readonly highlightRenderer = new HighlightRenderer()
+  onCellClick?: (row: number, col: number) => void
+
+  private board: readonly BoardRenderStone[] = []
+  private lastMove: CellCoord | null = null
+  private winCellSet: ReadonlySet<string> = new Set()
+  private lastViewport: ViewportSize = { width: 0, height: 0 }
+  private readonly unsubscribeCamera: () => void
+
   constructor(canvas: HTMLCanvasElement) {
     this.app = new Application({
       view: canvas,
@@ -32,196 +38,88 @@ export class CaroScene {
       resolution: window.devicePixelRatio || 1,
       autoDensity: true,
       antialias: true,
-    });
-    
-    this.world = new Container();
-    this.world.name = "GameRoot";
-    this.app.stage.addChild(this.world);
-    
-    this.gridLayer = new Graphics();
-    this.gridLayer.name = "GridLayer";
-    this.stoneLayer = new Container();
-    this.stoneLayer.name = "StoneLayer";
-    this.fxLayer = new Graphics();
-    this.fxLayer.name = "FxLayer";
-    
-    this.world.addChild(this.gridLayer);
-    this.world.addChild(this.fxLayer);
-    this.world.addChild(this.stoneLayer);
-    
-    this.setupInteraction();
-    
-    this.camera.x = this.app.screen.width / 2;
-    this.camera.y = this.app.screen.height / 2;
-    this.updateTransform();
-    
-    this.app.ticker.add(() => {
-      this.drawGrid();
-    });
+    })
+    this.world = new Container()
+    this.world.name = "GameRoot"
+    this.app.stage.addChild(this.world)
+    this.gridLayer = this.gridRenderer.graphics
+    this.gridLayer.name = "GridLayer"
+    this.stoneLayer = this.stoneRenderer.container
+    this.stoneLayer.name = "StoneLayer"
+    this.fxLayer = this.highlightRenderer.graphics
+    this.fxLayer.name = "FxLayer"
+    this.world.addChild(this.gridLayer, this.fxLayer, this.stoneLayer)
+
+    this.camera.panTo(this.app.screen.width / 2, this.app.screen.height / 2)
+    this.unsubscribeCamera = this.camera.subscribe(() => {
+      this.applyCameraTransform()
+      this.refreshVisibleBoard()
+    })
+    this.applyCameraTransform()
+    this.setupInteraction()
+    this.app.ticker.add(() => this.refreshViewportIfChanged())
   }
 
-  setupInteraction() {
-    this.app.stage.eventMode = "static";
-    this.app.stage.hitArea = {
-      contains: () => true
-    } as any;
-    
-    this.app.stage.on("pointerdown", (e: FederatedPointerEvent) => {
-      this.isPointerDown = true;
-      this.isDragging = false;
-      this.pointerDownPos = { x: e.global.x, y: e.global.y };
-      this.pointerDownCamera = { x: this.camera.x, y: this.camera.y };
-    });
-    
-    this.app.stage.on("pointermove", (e: FederatedPointerEvent) => {
-      if (!this.isPointerDown) return;
-      
-      const dx = e.global.x - this.pointerDownPos.x;
-      const dy = e.global.y - this.pointerDownPos.y;
-      
-      if (!this.isDragging && (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
-        this.isDragging = true;
-      }
-      
-      if (this.isDragging) {
-        this.camera.x = this.pointerDownCamera.x + dx;
-        this.camera.y = this.pointerDownCamera.y + dy;
-        this.updateTransform();
-      }
-    });
-    
-    const upHandler = (e: FederatedPointerEvent) => {
-      if (!this.isPointerDown) return;
-      this.isPointerDown = false;
-      
-      if (!this.isDragging && this.onCellClick) {
-        const cell = this.screenToCell(e.global.x, e.global.y);
-        this.onCellClick(cell.row, cell.col);
-      }
-      this.isDragging = false;
-    };
+  private setupInteraction(): void {
+    this.app.stage.eventMode = "static"
+    this.app.stage.hitArea = { contains: () => true } as any
+    this.app.stage.on("pointerdown", (event: FederatedPointerEvent) => {
+      this.inputController.pointerDown(event.global.x, event.global.y)
+    })
+    this.app.stage.on("pointermove", (event: FederatedPointerEvent) => {
+      const gesture = this.inputController.pointerMove(event.global.x, event.global.y)
+      if (gesture?.type === "PAN") this.camera.panBy(gesture.dx, gesture.dy)
+    })
+    const handlePointerUp = (event: FederatedPointerEvent) => {
+      const gesture = this.inputController.pointerUp(event.global.x, event.global.y, this.camera.snapshot())
+      if (gesture?.type === "CELL_TAP") this.onCellClick?.(gesture.cell.row, gesture.cell.col)
+    }
+    this.app.stage.on("pointerup", handlePointerUp)
+    this.app.stage.on("pointerupoutside", handlePointerUp)
+  }
 
-    this.app.stage.on("pointerup", upHandler);
-    this.app.stage.on("pointerupoutside", upHandler);
+  screenToCell(screenX: number, screenY: number): CellCoord {
+    return this.coordinateTransform.screenToCell(screenX, screenY, this.camera.snapshot())
   }
-  
-  screenToCell(screenX: number, screenY: number) {
-    const worldX = (screenX - this.camera.x) / this.camera.zoom;
-    const worldY = (screenY - this.camera.y) / this.camera.zoom;
-    
-    return {
-      col: Math.floor(worldX / CELL_SIZE),
-      row: Math.floor(worldY / CELL_SIZE),
-    };
+
+  private applyCameraTransform(): void {
+    const state = this.camera.snapshot()
+    this.world.position.set(state.x, state.y)
+    this.world.scale.set(state.zoom)
   }
-  
-  updateTransform() {
-    this.world.position.set(this.camera.x, this.camera.y);
-    this.world.scale.set(this.camera.zoom);
+
+  syncState(board: readonly BoardRenderStone[], lastMove: CellCoord | null, winCellSet: ReadonlySet<string>): void {
+    this.board = board
+    this.lastMove = lastMove
+    this.winCellSet = winCellSet
+    this.refreshVisibleBoard()
   }
-  
-  drawGrid() {
-    const minWorldX = (0 - this.camera.x) / this.camera.zoom;
-    const maxWorldX = (this.app.screen.width - this.camera.x) / this.camera.zoom;
-    const minWorldY = (0 - this.camera.y) / this.camera.zoom;
-    const maxWorldY = (this.app.screen.height - this.camera.y) / this.camera.zoom;
-    
-    const minCol = Math.floor(minWorldX / CELL_SIZE) - 1;
-    const maxCol = Math.floor(maxWorldX / CELL_SIZE) + 1;
-    const minRow = Math.floor(minWorldY / CELL_SIZE) - 1;
-    const maxRow = Math.floor(maxWorldY / CELL_SIZE) + 1;
-    
-    const newBounds = { minX: minCol, maxX: maxCol, minY: minRow, maxY: maxRow };
-    
-    if (this.lastDrawnBounds.minX === newBounds.minX && 
-        this.lastDrawnBounds.maxX === newBounds.maxX &&
-        this.lastDrawnBounds.minY === newBounds.minY &&
-        this.lastDrawnBounds.maxY === newBounds.maxY) {
-      return;
-    }
-    
-    this.lastDrawnBounds = newBounds;
-    this.gridLayer.clear();
-    
-    this.gridLayer.lineStyle(1, 0x000000, 0.08);
-    
-    const startX = minCol * CELL_SIZE;
-    const endX = maxCol * CELL_SIZE;
-    const startY = minRow * CELL_SIZE;
-    const endY = maxRow * CELL_SIZE;
-    
-    for (let c = minCol; c <= maxCol; c++) {
-      const x = c * CELL_SIZE;
-      this.gridLayer.moveTo(x, startY);
-      this.gridLayer.lineTo(x, endY);
-    }
-    
-    for (let r = minRow; r <= maxRow; r++) {
-      const y = r * CELL_SIZE;
-      this.gridLayer.moveTo(startX, y);
-      this.gridLayer.lineTo(endX, y);
-    }
+
+  private refreshViewportIfChanged(): void {
+    const viewport = { width: this.app.screen.width, height: this.app.screen.height }
+    if (viewport.width === this.lastViewport.width && viewport.height === this.lastViewport.height) return
+    this.refreshVisibleBoard()
   }
-  
-  syncState(state: GameState, lastMove: [number, number] | null, winCellSet: Set<string>) {
-    const currentKeys = new Set(this.stoneSprites.keys());
-    
-    state.board.forEach((player, key) => {
-      if (!this.stoneSprites.has(key)) {
-        const [r, c] = key.split(",").map(Number);
-        
-        const g = new Graphics();
-        g.name = `Stone#${key}`;
-        const cx = c * CELL_SIZE + CELL_SIZE / 2;
-        const cy = r * CELL_SIZE + CELL_SIZE / 2;
-        
-        g.position.set(cx, cy);
-        
-        if (player === "X") {
-          g.lineStyle(4, 0xa84b2a, 1);
-          const s = 12;
-          g.moveTo(-s, -s);
-          g.lineTo(s, s);
-          g.moveTo(s, -s);
-          g.lineTo(-s, s);
-        } else {
-          g.lineStyle(4, 0x315a72, 1);
-          g.drawCircle(0, 0, 14);
+
+  /** CAMERA_CHANGED, VIEWPORT_CHANGED and GAME_STATE_CHANGED converge here. */
+  refreshVisibleBoard(): void {
+    const viewport = { width: this.app.screen.width, height: this.app.screen.height }
+    this.lastViewport = viewport
+    const bounds = resolveVisibleBounds(this.camera.snapshot(), viewport)
+    this.gridRenderer.draw(bounds)
+    this.stoneRenderer.sync({
+      forEachStoneInBounds: (visibleBounds, callback) => {
+        for (const stone of this.board) {
+          const { row, col } = stone.cell
+          if (row >= visibleBounds.minRow && row <= visibleBounds.maxRow && col >= visibleBounds.minCol && col <= visibleBounds.maxCol) callback(stone.cell, stone.player)
         }
-        
-        this.stoneLayer.addChild(g);
-        this.stoneSprites.set(key, g);
-      }
-      currentKeys.delete(key);
-    });
-    
-    currentKeys.forEach(key => {
-      const sprite = this.stoneSprites.get(key);
-      if (sprite) {
-        this.stoneLayer.removeChild(sprite);
-        sprite.destroy();
-        this.stoneSprites.delete(key);
-      }
-    });
-    
-    this.fxLayer.clear();
-    
-    if (lastMove) {
-      const [r, c] = lastMove;
-      this.fxLayer.beginFill(0x000000, 0.05);
-      this.fxLayer.drawRect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-      this.fxLayer.endFill();
-    }
-    
-    winCellSet.forEach(key => {
-      const [r, c] = key.split(",").map(Number);
-      this.fxLayer.beginFill(0x8bc34a, 0.3);
-      this.fxLayer.drawRect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-      this.fxLayer.endFill();
-    });
+      },
+    }, bounds)
+    this.highlightRenderer.draw(this.lastMove, this.winCellSet)
   }
-  
-  destroy() {
-    this.app.destroy(true, { children: true });
+
+  destroy(): void {
+    this.unsubscribeCamera()
+    this.app.destroy(true, { children: true })
   }
 }

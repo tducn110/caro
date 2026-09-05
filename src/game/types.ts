@@ -1,21 +1,6 @@
-export type Player = "X" | "O"
-export type GameMode = "1v1" | "ai"
+/** @deprecated Compatibility exports. Import from the owning domain instead. */
+export type { CellCoord, Move, Player, WinResult } from "./core/types"
+export type { GameMode } from "./behaviors/match/MatchState"
+export type { BotDifficulty } from "./ai/contracts"
 export const WIN_LENGTH = 5
-
-export interface Move {
-  player: Player
-  row: number
-  col: number
-  index: number
-}
-
-export interface WinResult {
-  winner: Player
-  cells: [number, number][]
-}
-
-export interface CameraState {
-  x: number;
-  y: number;
-  zoom: number;
-}
+export type { CameraState } from "../board/spatial/Camera"

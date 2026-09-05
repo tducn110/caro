@@ -1,5 +1,5 @@
 {
-  "name": "figma-make-app",
+  "name": "10-caro",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -8,13 +8,17 @@
     "build": "vite build",
     "preview": "vite preview",
     "format": "oxfmt",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "i18next": "25.6.0",
+    "i18next-browser-languagedetector": "8.2.0",
     "lucide-react": "^1.33.0",
     "pixi.js": "^7.4.2",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-i18next": "16.0.1"
   },
   "devDependencies": {
     "@pixi/devtools": "^2.0.1",

@@ -1,9 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ArrowLeft, Bot, LogOut, RotateCcw, SquarePlus, UsersRound } from "lucide-react"
-import { GameState } from "./game/state"
-import { checkWinner } from "./game/rules"
-import { GameMode, WinResult, Player } from "./game/types"
-import { GomokuEngine } from "./game/bot"
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
+import {
+  ArrowLeft,
+  Bot,
+  Globe,
+  LogOut,
+  RotateCcw,
+  SquarePlus,
+  UsersRound,
+} from "lucide-react"
+import { useTranslation } from "react-i18next"
+import type { GameMode } from "./game/behaviors/match/MatchState"
+import { GameController } from "./app/GameController"
 import { CaroGameCanvas } from "./pixi/CaroGameCanvas"
 import { MobilePlayerBar } from "./components/Player"
 import { WinBanner } from "./components/WinBanner"
@@ -12,105 +19,52 @@ import { InfoCard } from "./components/Info"
 // ── Main App ─────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const gameStateRef = useRef(new GameState())
-  const [renderTick, setRenderTick] = useState(0)
-  
-  const [currentPlayer, setCurrentPlayer] = useState<Player>("X")
-  const [mode, setMode] = useState<GameMode>("1v1")
-  const [winner, setWinner] = useState<WinResult | null>(null)
-  const [aiThinking, setAiThinking] = useState(false)
-  const [difficulty, setDifficulty] = useState<"easy" | "normal" | "hard" | "expert">("normal");
-  
-  const botEngineRef = useRef<GomokuEngine | null>(null);
+  const { t, i18n } = useTranslation()
+  const controllerRef = useRef<GameController | null>(null)
+  if (!controllerRef.current) controllerRef.current = new GameController()
+  const controller = controllerRef.current
+  const snapshot = useSyncExternalStore(
+    controller.subscribe.bind(controller),
+    () => controller.snapshot(),
+    () => controller.snapshot(),
+  )
+  useEffect(() => () => controller.destroy(), [controller])
 
-  useEffect(() => {
-    botEngineRef.current = new GomokuEngine(25); // 25x25 local AI board
-    return () => {
-      botEngineRef.current?.destroy();
-    }
-  }, []);
+  const history = snapshot.history
+  const currentPlayer = snapshot.currentPlayer
+  const mode = snapshot.match.mode
+  const winner = snapshot.match.winner
+  const aiThinking = snapshot.aiThinking
+  const difficulty = snapshot.match.difficulty
+  const gameStarted = history.length > 0
+  const isDraw = false
 
-  const gameState = gameStateRef.current;
-  const history = gameState.history;
-  const gameStarted = history.length > 0;
-  
-  const isDraw = false; 
-
-  const lastMove = history.length > 0 ? [history[history.length - 1].row, history[history.length - 1].col] as [number, number] : null;
+  const lastMove = history.length > 0 ? history[history.length - 1].cell : null
 
   const winCellSet = useMemo(() => {
     if (!winner) return new Set<string>()
-    return new Set(winner.cells.map(([r, c]) => `${r},${c}`))
+    return new Set(winner.cells.map(({ row, col }) => `${row},${col}`))
   }, [winner])
-
-  const forceRender = () => setRenderTick(t => t + 1);
-
-  const placeMove = useCallback((row: number, col: number, isAI = false) => {
-    if (winner || (aiThinking && !isAI)) return;
-    const player: Player = isAI ? "O" : currentPlayer;
-    
-    if (gameStateRef.current.makeMove(row, col, player)) {
-      const result = checkWinner(gameStateRef.current, row, col)
-      if (result) {
-        setWinner(result)
-        setAiThinking(false)
-      } else {
-        const nextPlayer = player === "X" ? "O" : "X";
-        setCurrentPlayer(nextPlayer)
-        
-        if (mode === "ai" && nextPlayer === "O") {
-          setAiThinking(true);
-        } else {
-          setAiThinking(false);
-        }
-      }
-      forceRender()
-    }
-  }, [currentPlayer, winner, aiThinking, mode])
-
-  useEffect(() => {
-    if (mode === "ai" && currentPlayer === "O" && aiThinking && !winner) {
-      // AI turn
-      const engine = botEngineRef.current;
-      if (engine) {
-        const turnCount = gameStateRef.current.history.length;
-        engine.findBestMove(gameStateRef.current, { timeMs: 500, maxDepth: 64, difficulty }).then((move) => {
-          if (move && gameStateRef.current.history.length === turnCount) {
-            placeMove(move.row, move.col, true);
-          }
-        });
-      }
-    }
-  }, [mode, currentPlayer, aiThinking, winner, difficulty, placeMove]);
 
   const handleCellClick = useCallback(
     (row: number, col: number) => {
-      if (winner || aiThinking) return
-      if (mode === "ai" && currentPlayer === "O") return
-      placeMove(row, col)
+      controller.playCell({ row, col })
     },
-    [winner, aiThinking, mode, currentPlayer, placeMove],
+    [controller],
   )
 
-  const handleReplay = useCallback(() => {
-    gameStateRef.current.reset()
-    setCurrentPlayer("X")
-    setWinner(null)
-    setAiThinking(false)
-    forceRender()
-  }, [])
+  const handleReplay = useCallback(() => controller.replay(), [controller])
 
-  const handleNewGame = useCallback(
-    (newMode?: GameMode) => {
-      handleReplay()
-      if (newMode) setMode(newMode)
-    },
-    [handleReplay],
-  )
+  const handleNewGame = useCallback((newMode?: GameMode) => {
+    if (newMode) controller.setMode(newMode)
+    else controller.newGame()
+  }, [controller])
 
   const isGameOver = !!winner
   const p1label = mode === "ai" ? "Bạn" : "Người chơi 1"
   const p2label = mode === "ai" ? "Máy" : "Người chơi 2"
+  const currentLanguage = i18n.resolvedLanguage?.startsWith("en") ? "en" : "vi"
+  const nextLanguage = currentLanguage === "vi" ? "en" : "vi"
 
   const [displayElapsed, setDisplayElapsed] = useState(0)
   useEffect(() => {
@@ -123,8 +77,16 @@ export default function App() {
   }, [gameStarted])
 
   return (
-    <div 
-      style={{ display: "flex", flexDirection: "column", minHeight: "100%", maxWidth: 1400, margin: "0 auto", position: "relative", overflow: "hidden" }}
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        minHeight: "100%",
+        maxWidth: 1400,
+        margin: "0 auto",
+        position: "relative",
+        overflow: "hidden",
+      }}
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* Coffee ring decorations – purely decorative, pointer-events: none */}
@@ -172,23 +134,65 @@ export default function App() {
       />
 
       {/* ── Header ── */}
-      <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 8px", position: "relative", zIndex: 1 }}>
-        <button className="paper-btn" style={{ padding: "6px 12px", fontSize: 12 }} aria-label="Quay lại">
+      <header
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "16px 16px 8px",
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
+        <button
+          className="paper-btn"
+          style={{ padding: "6px 12px", fontSize: 12 }}
+          aria-label="Quay lại"
+        >
           <ArrowLeft size={14} />
-          <span style={{ display: "none" }} className="sm-inline">Quay lại</span>
+          <span style={{ display: "none" }} className="sm-inline">
+            Quay lại
+          </span>
         </button>
 
         <div style={{ textAlign: "center" }}>
-          <h1 className="font-display" style={{ fontWeight: 700, fontSize: "clamp(18px, 4vw, 26px)", lineHeight: 1, letterSpacing: "0.04em", color: "var(--ink)", margin: 0 }}>
+          <h1
+            className="font-display"
+            style={{
+              fontWeight: 700,
+              fontSize: "clamp(18px, 4vw, 26px)",
+              lineHeight: 1,
+              letterSpacing: "0.04em",
+              color: "var(--ink)",
+              margin: 0,
+            }}
+          >
             Cờ Caro
           </h1>
         </div>
 
-        <div style={{ width: 80 }} />
+        <button
+          className="paper-btn"
+          style={{ padding: "6px 10px", fontSize: 12 }}
+          aria-label={t("settings.language")}
+          onClick={() => void i18n.changeLanguage(nextLanguage)}
+        >
+          <Globe size={14} />
+          <span>{nextLanguage.toUpperCase()}</span>
+        </button>
       </header>
 
       {/* ── Mode Tabs ── */}
-      <div style={{ display: "flex", justifyContent: "center", padding: "0 16px", borderBottom: "1px solid var(--divider)", position: "relative", zIndex: 1 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          padding: "0 16px",
+          borderBottom: "1px solid var(--divider)",
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
         <div style={{ display: "flex", gap: 4 }}>
           {(["1v1", "ai"] as GameMode[]).map((m) => (
             <button
@@ -203,12 +207,13 @@ export default function App() {
           ))}
         </div>
         {mode === "ai" && (
-          <div style={{ marginLeft: 16, display: "flex", alignItems: "center" }}>
+          <div
+            style={{ marginLeft: 16, display: "flex", alignItems: "center" }}
+          >
             <select
               value={difficulty}
               onChange={(e) => {
-                setDifficulty(e.target.value as any);
-                handleNewGame();
+                controller.setDifficulty(e.target.value as "easy" | "normal" | "hard" | "expert")
               }}
               style={{
                 padding: "4px 8px",
@@ -218,7 +223,7 @@ export default function App() {
                 color: "var(--ink)",
                 fontSize: 13,
                 outline: "none",
-                cursor: "pointer"
+                cursor: "pointer",
               }}
             >
               <option value="easy">Dễ (Easy)</option>
@@ -231,8 +236,19 @@ export default function App() {
       </div>
 
       {/* ── Mobile player bar ── */}
-      <div style={{ display: "block", marginTop: 12, position: "relative", zIndex: 1 }}>
-        <MobilePlayerBar mode={mode} currentPlayer={currentPlayer} isGameOver={isGameOver} />
+      <div
+        style={{
+          display: "block",
+          marginTop: 12,
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
+        <MobilePlayerBar
+          mode={mode}
+          currentPlayer={currentPlayer}
+          isGameOver={isGameOver}
+        />
       </div>
 
       {/* ── Main content ── */}
@@ -248,33 +264,68 @@ export default function App() {
         }}
         className="main-layout"
       >
-        <div style={{ flex: 1, display: "flex", justifyContent: "center", width: "100%", minHeight: 350 }} className="mobile-board">
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            justifyContent: "center",
+            width: "100%",
+            minHeight: 350,
+          }}
+          className="mobile-board"
+        >
           <CaroGameCanvas
-            gameState={gameState}
+            board={snapshot.board}
             lastMove={lastMove}
             winCellSet={winCellSet}
             onCellClick={handleCellClick}
           />
         </div>
-        <div className="mobile-info" style={{ display: "flex", gap: 8, flexDirection: "column" }}>
+        <div
+          className="mobile-info"
+          style={{ display: "flex", gap: 8, flexDirection: "column" }}
+        >
           <InfoCard mode={mode} elapsed={displayElapsed} compact />
         </div>
       </main>
 
       {/* ── Win Banner ── */}
       <div style={{ padding: "0 12px 8px", position: "relative", zIndex: 1 }}>
-        <WinBanner winner={winner} mode={mode} isDraw={isDraw} onReplay={handleReplay} onNewGame={handleNewGame} />
+        <WinBanner
+          winner={winner}
+          mode={mode}
+          isDraw={isDraw}
+          onReplay={handleReplay}
+          onNewGame={handleNewGame}
+        />
       </div>
 
       {/* ── Footer actions ── */}
-      <footer style={{ display: "flex", justifyContent: "center", gap: 8, padding: "4px 16px 16px", position: "relative", zIndex: 1 }}>
+      <footer
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          gap: 8,
+          padding: "4px 16px 16px",
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
         {!isGameOver && (
           <>
-            <button className="paper-btn" onClick={handleReplay} aria-label="Chơi lại">
+            <button
+              className="paper-btn"
+              onClick={handleReplay}
+              aria-label="Chơi lại"
+            >
               <RotateCcw size={13} />
               <span>Chơi lại</span>
             </button>
-            <button className="paper-btn primary" onClick={() => handleNewGame()} aria-label="Ván mới">
+            <button
+              className="paper-btn primary"
+              onClick={() => handleNewGame()}
+              aria-label="Ván mới"
+            >
               <SquarePlus size={13} />
               <span>Ván mới</span>
             </button>

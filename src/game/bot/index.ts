@@ -1,108 +1,82 @@
-import { SearchOptions, SearchResult, PositionInput, BLACK, WHITE, EMPTY } from "./interface";
-import { GameState } from "../state";
+import type { AIRequest, AIResult } from "../ai/contracts"
+import type { SearchResult } from "./interface"
+
+interface PendingRequest {
+  resolve: (result: AIResult) => void
+  reject: (error: unknown) => void
+}
 
 export class GomokuEngine {
-  private worker: Worker;
-  private currentRequestId = 0;
-  private resolvePromise: ((res: SearchResult) => void) | null = null;
-  private boardSize: number;
+  private worker: Worker | null = null
+  private nextWorkerRequestId = 0
+  private readonly pending = new Map<number, PendingRequest>()
 
-  constructor(boardSize: number = 20) { // arbitrary size, or could be dynamic
-    this.boardSize = boardSize;
-    // Create the worker
-    this.worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
-    
-    this.worker.onmessage = (e) => {
-      const data = e.data;
-      if (data.type === "result" && data.id === this.currentRequestId) {
-        if (this.resolvePromise) {
-          this.resolvePromise(data.result);
-          this.resolvePromise = null;
-        }
-      }
-    };
-  }
+  constructor() { this.createWorker() }
 
-  // Convert map-based GameState to 1D Uint8Array
-  private preparePosition(state: GameState): PositionInput {
-    const size = this.boardSize;
-    const cells = new Uint8Array(size * size).fill(EMPTY);
-    
-    // Default offset to put the game in the middle of our bounded board
-    // Caro has infinite board in UI, but AI needs bounds.
-    // Let's find bounding box and map it to center
-    const bounds = state.bounds;
-    let offsetR = 0;
-    let offsetC = 0;
-    
-    if (state.history.length > 0) {
-      const centerR = Math.floor((bounds.minR + bounds.maxR) / 2);
-      const centerC = Math.floor((bounds.minC + bounds.maxC) / 2);
-      offsetR = Math.floor(size / 2) - centerR;
-      offsetC = Math.floor(size / 2) - centerC;
-    } else {
-      // First move logic if needed
+  private createWorker(): void {
+    this.worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" })
+    this.worker.onmessage = (event) => {
+      const data = event.data as { type: "result"; id: number; request: AIRequest; result: SearchResult }
+      if (data.type !== "result") return
+      const pending = this.pending.get(data.id)
+      if (!pending) return
+      this.pending.delete(data.id)
+      const rawMove = data.result.move
+      const stride = data.request.position.size + 2
+      const move = rawMove === null
+        ? null
+        : {
+            row: Math.floor(rawMove / stride) - 1 - data.request.position.offset.row,
+            col: (rawMove % stride) - 1 - data.request.position.offset.col,
+          }
+      pending.resolve({
+        requestId: data.request.requestId,
+        roundId: data.request.roundId,
+        move,
+        stats: {
+          depth: data.result.depth,
+          nodes: data.result.nodes,
+          elapsedMs: data.result.elapsedMs,
+          reason: data.result.reason,
+        },
+      })
     }
-
-    state.board.forEach((player, key) => {
-      const [r, c] = key.split(",").map(Number);
-      const mapR = r + offsetR;
-      const mapC = c + offsetC;
-      if (mapR >= 0 && mapR < size && mapC >= 0 && mapC < size) {
-        cells[mapR * size + mapC] = player === "X" ? BLACK : WHITE;
-      }
-    });
-
-    const sideToMove = (state.history.length % 2 === 0) ? BLACK : WHITE;
-    let lastMove = null;
-    if (state.history.length > 0) {
-      const last = state.history[state.history.length - 1];
-      const mapR = last.row + offsetR;
-      const mapC = last.col + offsetC;
-      if (mapR >= 0 && mapR < size && mapC >= 0 && mapC < size) {
-        lastMove = mapR * size + mapC;
-      }
+    this.worker.onerror = (error) => {
+      for (const pending of this.pending.values()) pending.reject(error)
+      this.pending.clear()
     }
-
-    // Attach offsets so we can translate the result back to global coordinates
-    (cells as any).__offset = { r: offsetR, c: offsetC };
-
-    return { size, cells, sideToMove, lastMove };
   }
 
-  public async findBestMove(state: GameState, options: SearchOptions): Promise<{ row: number, col: number } | null> {
-    const position = this.preparePosition(state);
-    const offsetR = (position.cells as any).__offset.r;
-    const offsetC = (position.cells as any).__offset.c;
-
-    this.currentRequestId++;
-    
-    return new Promise((resolve) => {
-      this.resolvePromise = (res: SearchResult) => {
-        if (res.move !== null) {
-          // Convert move index back to row/col
-          const stride = position.size + 2;
-          const mapR = Math.floor(res.move / stride) - 1;
-          const mapC = (res.move % stride) - 1;
-          
-          const row = mapR - offsetR;
-          const col = mapC - offsetC;
-          resolve({ row, col });
-        } else {
-          resolve(null);
-        }
-      };
-      
-      this.worker.postMessage({
-        type: "search",
-        id: this.currentRequestId,
-        position,
-        options
-      });
-    });
+  search(request: AIRequest): Promise<AIResult> {
+    const id = ++this.nextWorkerRequestId
+    return new Promise((resolve, reject) => {
+      if (!this.worker) {
+        reject(new Error("AI engine is destroyed"))
+        return
+      }
+      this.pending.set(id, { resolve, reject })
+      try {
+        this.worker.postMessage({ type: "search", id, request })
+      } catch (error) {
+        this.pending.delete(id)
+        reject(error)
+      }
+    })
   }
 
-  public destroy() {
-    this.worker.terminate();
+  cancelPending(): void {
+    const cancellation = new Error("AI search cancelled")
+    for (const pending of this.pending.values()) pending.reject(cancellation)
+    this.pending.clear()
+    this.worker?.terminate()
+    this.createWorker()
+  }
+
+  destroy(): void {
+    const cancellation = new Error("AI engine destroyed")
+    for (const pending of this.pending.values()) pending.reject(cancellation)
+    this.pending.clear()
+    this.worker?.terminate()
+    this.worker = null
   }
 }

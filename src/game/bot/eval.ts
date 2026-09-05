@@ -1,110 +1,183 @@
-import { BotBoard } from "./board";
-import { EMPTY, WALL } from "./interface";
+import { BotBoard } from "./board"
 
-const SCORE_WIN = 100000000;
-const SCORE_OPEN_FOUR = 10000000;
-const SCORE_FOUR = 1000000;
-const SCORE_OPEN_THREE = 100000;
-const SCORE_THREE = 10000;
-const SCORE_OPEN_TWO = 1000;
-const SCORE_TWO = 100;
+export const SCORE_WIN = 100000000
 
-function evaluateLine(board: BotBoard, index: number, step: number, player: number): number {
-  let count = 1;
-  let block1 = 1;
-  let block2 = 1;
-  let emptyCount = 0;
+export const PATTERN_FIVE = 5
+export const PATTERN_OPEN_FOUR = 4
+export const PATTERN_FOUR = 3
+export const PATTERN_OPEN_THREE = 2
+export const PATTERN_BROKEN_THREE = 1
+export const PATTERN_NONE = 0
 
-  // Forward
-  let p = index + step;
-  while (board.cells[p] === player) {
-    count++;
-    p += step;
-  }
-  if (board.cells[p] === EMPTY) {
-    block1 = 0;
-    emptyCount++;
-  } else if (board.cells[p] === WALL || board.cells[p] === (3 - player)) {
-    block1 = 1;
+const MAX_LEN = 15
+const patternTable = new Uint8Array((MAX_LEN + 1) * 32768)
+
+function initPatternTable() {
+  function hasFive(mask: number, len: number) {
+    for (let i = 0; i <= len - 5; i++) {
+      if (((mask >> i) & 0b11111) === 0b11111) return true
+    }
+    return false
   }
 
-  // Backward
-  p = index - step;
-  while (board.cells[p] === player) {
-    count++;
-    p -= step;
-  }
-  if (board.cells[p] === EMPTY) {
-    block2 = 0;
-    emptyCount++;
-  } else if (board.cells[p] === WALL || board.cells[p] === (3 - player)) {
-    block2 = 1;
+  function countWinCells(mask: number, len: number) {
+    let wins = 0
+    for (let i = 0; i < len; i++) {
+      if ((mask & (1 << i)) === 0) {
+        if (hasFive(mask | (1 << i), len)) wins++
+      }
+    }
+    return wins
   }
 
-  const blocks = block1 + block2;
+  for (let len = 5; len <= MAX_LEN; len++) {
+    for (let mask = 0; mask < 1 << len; mask++) {
+      let val = PATTERN_NONE
+      if (hasFive(mask, len)) {
+        val = PATTERN_FIVE
+      } else {
+        const wins = countWinCells(mask, len)
+        if (wins >= 2) val = PATTERN_OPEN_FOUR
+        else if (wins === 1) val = PATTERN_FOUR
+        else {
+          let openThreeThreats = 0
+          for (let i = 0; i < len; i++) {
+            if ((mask & (1 << i)) === 0) {
+              if (countWinCells(mask | (1 << i), len) >= 2) openThreeThreats++
+            }
+          }
+          if (openThreeThreats >= 2) val = PATTERN_OPEN_THREE
+          else if (openThreeThreats === 1) val = PATTERN_BROKEN_THREE
+        }
+      }
+      patternTable[(len << 15) | mask] = val
+    }
+  }
+}
+initPatternTable()
 
-  if (count >= 5) return SCORE_WIN;
-  if (count === 4) {
-    if (blocks === 0) return SCORE_OPEN_FOUR;
-    if (blocks === 1) return SCORE_FOUR;
+export function evaluateLine(
+  board: BotBoard,
+  p: number,
+  start: number,
+  step: number,
+  length: number,
+): number[] {
+  let mask = 0
+  let len = 0
+  const counts = [0, 0, 0, 0, 0, 0]
+
+  for (let i = 0; i < length; i++) {
+    const c = board.cells[start + i * step]
+    if (c === p || c === 0) {
+      if (c === p) mask |= 1 << len
+      len++
+    } else {
+      if (len >= 5) {
+        const pat = patternTable[(len << 15) | mask]
+        if (pat > 0) counts[pat]++
+      }
+      len = 0
+      mask = 0
+    }
   }
-  if (count === 3) {
-    if (blocks === 0) return SCORE_OPEN_THREE;
-    if (blocks === 1) return SCORE_THREE;
+  if (len >= 5) {
+    const pat = patternTable[(len << 15) | mask]
+    if (pat > 0) counts[pat]++
   }
-  if (count === 2) {
-    if (blocks === 0) return SCORE_OPEN_TWO;
-    if (blocks === 1) return SCORE_TWO;
-  }
-  return 0;
+  return counts
 }
 
 export function evaluatePosition(board: BotBoard, sideToMove: number): number {
-  let score = 0;
-  const dirs = [1, board.stride, board.stride + 1, board.stride - 1];
+  const p = sideToMove
+  const opp = 3 - sideToMove
 
-  // A very basic evaluation that checks all stones. 
-  // In a real optimized engine, we update eval incrementally.
-  let minR = board.size, maxR = 1, minC = board.size, maxC = 1;
-  let hasStones = false;
-  for (let r = 1; r <= board.size; r++) {
-    for (let c = 1; c <= board.size; c++) {
-      if (board.cells[r * board.stride + c] !== EMPTY && board.cells[r * board.stride + c] !== WALL) {
-        if (r < minR) minR = r;
-        if (r > maxR) maxR = r;
-        if (c < minC) minC = c;
-        if (c > maxC) maxC = c;
-        hasStones = true;
+  const pCounts = [0, 0, 0, 0, 0, 0]
+  const oppCounts = [0, 0, 0, 0, 0, 0]
+
+  // Evaluate all lines
+  const size = board.size
+  const stride = board.stride
+
+  for (let i = 1; i <= size; i++) {
+    // Horizontal
+    let start = i * stride + 1
+    let cP = evaluateLine(board, p, start, 1, size)
+    let cO = evaluateLine(board, opp, start, 1, size)
+    for (let j = 1; j <= 5; j++) {
+      pCounts[j] += cP[j]
+      oppCounts[j] += cO[j]
+    }
+
+    // Vertical
+    start = 1 * stride + i
+    cP = evaluateLine(board, p, start, stride, size)
+    cO = evaluateLine(board, opp, start, stride, size)
+    for (let j = 1; j <= 5; j++) {
+      pCounts[j] += cP[j]
+      oppCounts[j] += cO[j]
+    }
+  }
+
+  // Diagonals \
+  for (let r = 1; r <= size - 4; r++) {
+    const length = size - r + 1
+    let start = r * stride + 1
+    let cP = evaluateLine(board, p, start, stride + 1, length)
+    let cO = evaluateLine(board, opp, start, stride + 1, length)
+    for (let j = 1; j <= 5; j++) {
+      pCounts[j] += cP[j]
+      oppCounts[j] += cO[j]
+    }
+
+    if (r > 1) {
+      start = 1 * stride + r
+      cP = evaluateLine(board, p, start, stride + 1, length)
+      cO = evaluateLine(board, opp, start, stride + 1, length)
+      for (let j = 1; j <= 5; j++) {
+        pCounts[j] += cP[j]
+        oppCounts[j] += cO[j]
       }
     }
   }
 
-  if (!hasStones) return 0;
+  // Diagonals /
+  for (let r = 1; r <= size - 4; r++) {
+    const length = size - r + 1
+    let start = r * stride + size
+    let cP = evaluateLine(board, p, start, stride - 1, length)
+    let cO = evaluateLine(board, opp, start, stride - 1, length)
+    for (let j = 1; j <= 5; j++) {
+      pCounts[j] += cP[j]
+      oppCounts[j] += cO[j]
+    }
 
-  for (let r = minR; r <= maxR; r++) {
-    for (let c = minC; c <= maxC; c++) {
-      const idx = r * board.stride + c;
-      const player = board.cells[idx];
-      if (player === EMPTY || player === WALL) continue;
-
-      let cellScore = 0;
-      for (const step of dirs) {
-        // Only evaluate from the "start" of a line to avoid double counting
-        if (board.cells[idx - step] !== player) {
-          cellScore += evaluateLine(board, idx, step, player);
-        }
-      }
-
-      if (player === sideToMove) {
-        score += cellScore;
-      } else {
-        score -= cellScore; // Opponent has this score, so it's bad for us
+    if (r > 1) {
+      start = 1 * stride + (size - r + 1)
+      cP = evaluateLine(board, p, start, stride - 1, length)
+      cO = evaluateLine(board, opp, start, stride - 1, length)
+      for (let j = 1; j <= 5; j++) {
+        pCounts[j] += cP[j]
+        oppCounts[j] += cO[j]
       }
     }
   }
 
-  // Add small random noise to prevent identical scores and add variety
-  score += Math.random() * 10 - 5; 
+  if (pCounts[PATTERN_FIVE] > 0) return SCORE_WIN
+  if (oppCounts[PATTERN_FIVE] > 0) return -SCORE_WIN
 
-  return score;
+  let score = 0
+  score += pCounts[PATTERN_OPEN_FOUR] * 1000000
+  score -= oppCounts[PATTERN_OPEN_FOUR] * 1000000
+
+  score += pCounts[PATTERN_FOUR] * 10000
+  score -= oppCounts[PATTERN_FOUR] * 10000
+
+  score += pCounts[PATTERN_OPEN_THREE] * 5000
+  score -= oppCounts[PATTERN_OPEN_THREE] * 5000
+
+  score += pCounts[PATTERN_BROKEN_THREE] * 100
+  score -= oppCounts[PATTERN_BROKEN_THREE] * 100
+
+  return score
 }

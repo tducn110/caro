@@ -1,15 +1,15 @@
-import { defineConfig } from 'vitest/config'
+import { defineConfig } from "vitest/config"
 
 export default defineConfig({
   test: {
-    environment: 'jsdom',
-    setupFiles: ['./vitest.setup.ts'],
+    environment: "jsdom",
+    setupFiles: ["./vitest.setup.ts"],
     deps: {
       optimizer: {
         web: {
-          include: ['vitest-canvas-mock']
-        }
-      }
-    }
+          include: ["vitest-canvas-mock"],
+        },
+      },
+    },
   },
 })

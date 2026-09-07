@@ -1,4 +1,5 @@
 import { memo } from "react"
+import { useTranslation } from "react-i18next"
 import { RotateCcw, SquarePlus } from "lucide-react"
 import type { WinResult } from "../game/core/types"
 import type { GameMode } from "../game/behaviors/match/MatchState"
@@ -18,20 +19,23 @@ export function WinBanner({
   onReplay: () => void
   onNewGame: () => void
 }) {
+  const { t } = useTranslation()
   if (!winner && !isDraw) return null
 
-  let title = "Hòa!"
-  let sub = "Bàn cờ đã kín"
+  let title = t("game.draw")
+  let sub = t("game.boardFull")
   let color = "var(--ink-muted)"
 
   if (winner) {
     if (mode === "ai") {
-      title = winner.winner === "X" ? "Bạn thắng!" : "Máy thắng!"
+      title = winner.winner === "X" ? t("game.youWin") : t("game.machineWin")
     } else {
       title =
-        winner.winner === "X" ? "Người chơi 1 thắng!" : "Người chơi 2 thắng!"
+        winner.winner === "X"
+          ? t("game.playerWin", { number: 1 })
+          : t("game.playerWin", { number: 2 })
     }
-    sub = "5 quân liên tiếp"
+    sub = t("game.fiveInRow")
     color = winner.winner === "X" ? "var(--x-color)" : "var(--o-color)"
   }
 
@@ -60,17 +64,17 @@ export function WinBanner({
         </div>
       </div>
       <div style={{ display: "flex", gap: 8 }}>
-        <button className="paper-btn" onClick={onReplay} aria-label="Chơi lại">
+        <button className="paper-btn" onClick={onReplay} aria-label={t("common.retry")}>
           <RotateCcw size={13} />
-          <span>Chơi lại</span>
+          <span>{t("common.retry")}</span>
         </button>
         <button
           className="paper-btn primary"
           onClick={onNewGame}
-          aria-label="Ván mới"
+          aria-label={t("common.play")}
         >
           <SquarePlus size={13} />
-          <span>Ván mới</span>
+          <span>{t("common.play")}</span>
         </button>
       </div>
     </div>

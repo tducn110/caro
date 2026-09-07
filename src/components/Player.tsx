@@ -1,4 +1,5 @@
 import { memo } from "react"
+import { useTranslation } from "react-i18next"
 import { XPiece, OPiece } from "./Piece"
 import { Bot, UsersRound } from "lucide-react"
 import type { Player } from "../game/core/types"
@@ -19,6 +20,7 @@ export const PlayerCard = memo(function PlayerCard({
   isAI?: boolean
   aiThinking?: boolean
 }) {
+  const { t } = useTranslation()
   const borderColor = isActive
     ? piece === "X"
       ? "var(--x-color)"
@@ -78,7 +80,7 @@ export const PlayerCard = memo(function PlayerCard({
                 <span className="thinking-dot">•</span>
               </span>
             ) : (
-              "Đến lượt"
+              t("game.turn")
             )}
           </span>
         )}
@@ -122,7 +124,7 @@ export const PlayerCard = memo(function PlayerCard({
               color: piece === "X" ? "var(--x-color)" : "var(--o-color)",
             }}
           >
-            {piece === "X" ? "× Quân X" : "○ Quân O"}
+            {piece === "X" ? `× ${t("game.pieceX")}` : `○ ${t("game.pieceO")}`}
           </div>
         </div>
       </div>
@@ -141,8 +143,9 @@ export const MobilePlayerBar = memo(function MobilePlayerBar({
   currentPlayer: Player
   isGameOver: boolean
 }) {
-  const p1label = mode === "ai" ? "Bạn" : "Người chơi 1"
-  const p2label = mode === "ai" ? "Máy" : "Người chơi 2"
+  const { t } = useTranslation()
+  const p1label = mode === "ai" ? t("game.you") : t("game.player", { number: 1 })
+  const p2label = mode === "ai" ? t("game.machine") : t("game.player", { number: 2 })
   const activeX = !isGameOver && currentPlayer === "X"
   const activeO = !isGameOver && currentPlayer === "O"
 

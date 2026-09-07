@@ -1,4 +1,5 @@
 import { memo } from "react"
+import { useTranslation } from "react-i18next"
 import { UsersRound, Grid3X3, Clock3, History } from "lucide-react"
 import type { Move } from "../game/core/types"
 import type { GameMode } from "../game/behaviors/match/MatchState"
@@ -50,6 +51,7 @@ export const InfoCard = memo(function InfoCard({
   elapsed: number
   compact?: boolean
 }) {
+  const { t } = useTranslation()
   return (
     <div
       className="paper-card"
@@ -72,7 +74,7 @@ export const InfoCard = memo(function InfoCard({
             borderBottom: "1px solid var(--divider)",
           }}
         >
-          Thông tin
+          {t("game.info")}
         </div>
       )}
       <div
@@ -85,17 +87,17 @@ export const InfoCard = memo(function InfoCard({
       >
         <InfoRow
           icon={<UsersRound size={12} />}
-          label="Chế độ"
-          value={mode === "1v1" ? "1v1" : "Đấu máy"}
+          label={t("game.mode")}
+          value={mode === "1v1" ? "1v1" : t("game.modeAi")}
         />
         <InfoRow
           icon={<Grid3X3 size={12} />}
-          label="Kích thước"
-          value="Vô hạn"
+          label={t("game.size")}
+          value={t("game.infinite")}
         />
         <InfoRow
           icon={<Clock3 size={12} />}
-          label="Thời gian"
+          label={t("game.time")}
           value={formatTime(elapsed)}
           mono
         />
@@ -113,6 +115,7 @@ export const HistoryPanel = memo(function HistoryPanel({
   history: Move[]
   compact?: boolean
 }) {
+  const { t } = useTranslation()
   const recent = [...history].reverse().slice(0, compact ? 4 : 22)
 
   return (
@@ -142,7 +145,7 @@ export const HistoryPanel = memo(function HistoryPanel({
         }}
       >
         <History size={11} />
-        Lịch sử nước đi
+        {t("game.moveHistory")}
       </div>
       <div style={{ overflowY: "auto", maxHeight: compact ? 60 : 220 }}>
         {recent.length === 0 ? (
@@ -153,7 +156,7 @@ export const HistoryPanel = memo(function HistoryPanel({
               color: "var(--ink-faint)",
             }}
           >
-            Chưa có nước đi nào
+            {t("game.noMoves")}
           </div>
         ) : (
           recent.map((m) => (

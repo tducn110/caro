@@ -61,8 +61,6 @@ export default function App() {
   }, [controller])
 
   const isGameOver = !!winner
-  const p1label = mode === "ai" ? "Bạn" : "Người chơi 1"
-  const p2label = mode === "ai" ? "Máy" : "Người chơi 2"
   const currentLanguage = i18n.resolvedLanguage?.startsWith("en") ? "en" : "vi"
   const nextLanguage = currentLanguage === "vi" ? "en" : "vi"
 
@@ -147,11 +145,11 @@ export default function App() {
         <button
           className="paper-btn"
           style={{ padding: "6px 12px", fontSize: 12 }}
-          aria-label="Quay lại"
+          aria-label={t("common.back")}
         >
           <ArrowLeft size={14} />
           <span style={{ display: "none" }} className="sm-inline">
-            Quay lại
+            {t("common.back")}
           </span>
         </button>
 
@@ -167,7 +165,7 @@ export default function App() {
               margin: 0,
             }}
           >
-            Cờ Caro
+            {t("game.title")}
           </h1>
         </div>
 
@@ -202,7 +200,7 @@ export default function App() {
               aria-pressed={mode === m}
             >
               {m === "1v1" ? <UsersRound size={14} /> : <Bot size={14} />}
-              <span>{m === "1v1" ? "1v1" : "Đấu máy"}</span>
+              <span>{m === "1v1" ? "1v1" : t("game.modeAi")}</span>
             </button>
           ))}
         </div>
@@ -226,10 +224,10 @@ export default function App() {
                 cursor: "pointer",
               }}
             >
-              <option value="easy">Dễ (Easy)</option>
-              <option value="normal">Trung bình (Normal)</option>
-              <option value="hard">Khó (Hard)</option>
-              <option value="expert">Chuyên gia (Expert)</option>
+              <option value="easy">{t("game.difficultyEasy")}</option>
+              <option value="normal">{t("game.difficultyNormal")}</option>
+              <option value="hard">{t("game.difficultyHard")}</option>
+              <option value="expert">{t("game.difficultyExpert")}</option>
             </select>
           </div>
         )}
@@ -316,24 +314,24 @@ export default function App() {
             <button
               className="paper-btn"
               onClick={handleReplay}
-              aria-label="Chơi lại"
+              aria-label={t("common.retry")}
             >
               <RotateCcw size={13} />
-              <span>Chơi lại</span>
+              <span>{t("common.retry")}</span>
             </button>
             <button
               className="paper-btn primary"
               onClick={() => handleNewGame()}
-              aria-label="Ván mới"
+              aria-label={t("common.play")}
             >
               <SquarePlus size={13} />
-              <span>Ván mới</span>
+              <span>{t("common.play")}</span>
             </button>
           </>
         )}
-        <button className="paper-btn danger" aria-label="Thoát">
+        <button className="paper-btn danger" aria-label={t("common.close")}>
           <LogOut size={13} />
-          <span>Thoát</span>
+          <span>{t("common.close")}</span>
         </button>
       </footer>
     </div>

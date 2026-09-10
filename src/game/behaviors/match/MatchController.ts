@@ -2,7 +2,7 @@ import type { WinResult } from "../../core/types"
 import type { BotDifficulty, GameMode, MatchPhase, MatchState } from "./MatchState"
 
 export class MatchController {
-  private state: MatchState = { phase: "ready", mode: "1v1", difficulty: "normal", winner: null, roundId: 0 }
+  private state: MatchState = { phase: "ready", mode: "1v1", difficulty: "normal", winner: null, isDraw: false, roundId: 0 }
 
   snapshot(): MatchState { return { ...this.state } }
 
@@ -25,6 +25,7 @@ export class MatchController {
     this.state.roundId++
     this.state.phase = "playing"
     this.state.winner = null
+    this.state.isDraw = false
     return true
   }
 
@@ -33,6 +34,7 @@ export class MatchController {
     this.state.roundId++
     this.state.phase = "playing"
     this.state.winner = null
+    this.state.isDraw = false
     return true
   }
 
@@ -43,10 +45,19 @@ export class MatchController {
     return true
   }
 
+  finishDraw(): boolean {
+    if (this.state.phase !== "playing") return false
+    this.state.winner = null
+    this.state.isDraw = true
+    this.state.phase = "game-over"
+    return true
+  }
+
   newGame(): boolean {
     this.state.roundId++
     this.state.phase = "setup"
     this.state.winner = null
+    this.state.isDraw = false
     return true
   }
 }

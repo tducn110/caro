@@ -11,5 +11,6 @@ export interface MatchState {
   mode: GameMode
   difficulty: BotDifficulty
   winner: WinResult | null
+  isDraw: boolean
   roundId: number
 }

@@ -1,0 +1,8 @@
+# The production app imports this generated package directly. Keep its exact
+# JavaScript, declarations and WASM binary with the UI checkout so a Vite build
+# does not require a Rust toolchain.
+!gomoku_engine.js
+!gomoku_engine.d.ts
+!gomoku_engine_bg.wasm
+!gomoku_engine_bg.wasm.d.ts
+!package.json

@@ -9,6 +9,7 @@ vi.mock("pixi.js", async (importOriginal) => {
       screen = { width: 800, height: 600 };
       ticker = { add: vi.fn() };
       destroy = vi.fn();
+      resize = vi.fn();
     }
   };
 });
@@ -35,27 +36,22 @@ describe("CaroScene: Coordinate and Input Layer", () => {
   });
 
   it("screenToCell: converts screen coords to board correctly", () => {
-    // Camera is initially at 400, 300 (center of 800x600)
+    // Camera centers the finite 15 by 15 board in the 800 by 600 viewport.
     const cameraState = scene.camera.snapshot();
-    expect(cameraState.x).toBe(400);
-    expect(cameraState.y).toBe(300);
-    expect(cameraState.zoom).toBe(1);
+    expect(cameraState.x).toBe(124);
+    expect(cameraState.y).toBe(24);
+    expect(cameraState.zoom).toBeCloseTo(552 / 840);
 
-    // Clicking exactly at camera center (400, 300) should be row 0, col 0
+    // The board centre lands in its centre cell.
     const centerCell = scene.screenToCell(400, 300);
-    expect(centerCell).toEqual({ row: 0, col: 0 });
+    expect(centerCell).toEqual({ row: 7, col: 7 });
 
-    // Clicking at 400 + CELL_SIZE + 1 (right) -> col 1
-    const rightCell = scene.screenToCell(400 + CELL_SIZE + 1, 300);
-    expect(rightCell.col).toBe(1);
+    // Clicking one cell right of the board centre -> col 8
+    const rightCell = scene.screenToCell(400 + CELL_SIZE * cameraState.zoom + 1, 300);
+    expect(rightCell.col).toBe(8);
 
-    // Clicking at 400 - 1 (left) -> col -1 (math floor logic)
-    const leftCell = scene.screenToCell(399, 300);
-    expect(leftCell.col).toBe(-1);
-
-    // Clicking far away
-    const farCell = scene.screenToCell(400 - CELL_SIZE * 10 - 10, 300 - CELL_SIZE * 20 - 10);
-    expect(farCell).toEqual({ col: -11, row: -21 });
+    // Coordinate conversion is still available for input to reject outside cells.
+    expect(scene.screenToCell(-100, -100)).toEqual({ col: -7, row: -4 });
   });
 
   it("gesture: drag updates camera without triggering click", () => {
@@ -69,8 +65,8 @@ describe("CaroScene: Coordinate and Input Layer", () => {
     scene.app.stage.emit("pointermove", { global: { x: 420, y: 320 } });
     
     const cam = scene.camera.snapshot();
-    expect(cam.x).toBe(420); // 400 + 20
-    expect(cam.y).toBe(320);
+    expect(cam.x).toBe(144); // 124 + 20
+    expect(cam.y).toBe(44); // 24 + 20
 
     // Simulate pointerup
     scene.app.stage.emit("pointerup", { global: { x: 420, y: 320 } });
@@ -93,8 +89,16 @@ describe("CaroScene: Coordinate and Input Layer", () => {
     scene.app.stage.emit("pointerup", { global: { x: 400, y: 300 } });
     
     expect(clickCount).toBe(1);
-    expect(clickedCell).toEqual({ row: 0, col: 0 });
+    expect(clickedCell).toEqual({ row: 7, col: 7 });
+  });
+
+  it("gesture: tap outside the finite board does not trigger a cell click", () => {
+    const onCellClick = vi.fn();
+    scene.onCellClick = onCellClick;
+
+    scene.app.stage.emit("pointerdown", { global: { x: -100, y: -100 } });
+    scene.app.stage.emit("pointerup", { global: { x: -100, y: -100 } });
+
+    expect(onCellClick).not.toHaveBeenCalled();
   });
 });
-
-

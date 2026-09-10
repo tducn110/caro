@@ -1,6 +1,7 @@
 import type { CellCoord } from "../../game/core/types"
 import type { CameraState } from "../spatial/Camera"
 import type { CoordinateTransform } from "../spatial/CoordinateTransform"
+import { isBoardCell } from "../../game/core/BoardBounds"
 
 export type BoardGesture = { type: "PAN"; dx: number; dy: number } | { type: "CELL_TAP"; cell: CellCoord }
 export type PointerGestureState = "idle" | "pressed" | "dragging"
@@ -17,7 +18,8 @@ export class BoardInputController {
     return this.state === "dragging" ? { type: "PAN", dx, dy } : null
   }
   pointerUp(x: number, y: number, camera: CameraState): BoardGesture | null {
-    const gesture = this.state === "pressed" ? { type: "CELL_TAP" as const, cell: this.transform.screenToCell(x, y, camera) } : null
+    const cell = this.transform.screenToCell(x, y, camera)
+    const gesture = this.state === "pressed" && isBoardCell(cell) ? { type: "CELL_TAP" as const, cell } : null
     this.state = "idle"
     return gesture
   }

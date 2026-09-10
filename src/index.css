@@ -35,6 +35,8 @@
 html, body, #root {
   height: 100%;
   margin: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
 body {
@@ -141,6 +143,39 @@ body {
   color: var(--ink);
 }
 
+/* Difficulty is always visible; a select hid the available AI levels. */
+.difficulty-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid rgba(80, 62, 42, 0.22);
+  border-radius: var(--radius-sm);
+  background: rgba(250, 241, 220, 0.72);
+  box-shadow: 0 1px 2px rgba(70, 52, 34, 0.08);
+}
+.difficulty-button {
+  min-height: 30px;
+  padding: 4px 9px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-muted);
+  font: 700 11px/1 'Lato', system-ui, sans-serif;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 120ms, color 120ms, box-shadow 120ms;
+}
+.difficulty-button:hover {
+  background: rgba(216, 190, 145, 0.35);
+  color: var(--ink);
+}
+.difficulty-button.selected {
+  background: var(--ink);
+  color: var(--paper-light);
+  box-shadow: 0 1px 2px rgba(48, 42, 35, 0.22);
+}
+
 /* Paper button */
 .paper-btn {
   display: inline-flex;
@@ -207,13 +242,23 @@ body {
 }
 
 /* Responsive layout helpers */
-/* Mobile: show mobile board + info, hide desktop aside */
+/* Mobile: show mobile board, hide desktop aside; info card only on desktop/tablet */
 .desktop-row { display: none !important; }
 .mobile-board { display: flex !important; }
-.mobile-info  { display: flex !important; }
+.mobile-info  { display: none !important; }
 .lg-hidden    { display: block; }
+
+@media (min-width: 768px) {
+  .mobile-info { display: flex !important; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .piece-enter, .win-banner { animation: none; }
   .board-cell, .paper-btn { transition: none; }
+}
+
+@media (max-width: 560px) {
+  .mode-tab { padding: 5px 10px; font-size: 11px; }
+  .difficulty-button { padding: 3px 6px; font-size: 10px; min-height: 26px; }
+  .paper-btn { padding: 5px 10px; font-size: 11px; }
 }

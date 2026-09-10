@@ -93,7 +93,7 @@ export const InfoCard = memo(function InfoCard({
         <InfoRow
           icon={<Grid3X3 size={12} />}
           label={t("game.size")}
-          value={t("game.infinite")}
+          value={t("game.boardSize")}
         />
         <InfoRow
           icon={<Clock3 size={12} />}

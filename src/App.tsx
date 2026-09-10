@@ -15,11 +15,17 @@ import { CaroGameCanvas } from "./pixi/CaroGameCanvas"
 import { MobilePlayerBar } from "./components/Player"
 import { WinBanner } from "./components/WinBanner"
 import { InfoCard } from "./components/Info"
+import type { BotDifficulty } from "./game/ai/contracts"
+import { useWinkIntegration } from "./integrations/wink/useWinkIntegration"
 
 // ── Main App ─────────────────────────────────────────────────────────────────
 
+const AI_DIFFICULTIES: readonly BotDifficulty[] = ["easy", "normal", "hard", "expert"]
+
 export default function App() {
   const { t, i18n } = useTranslation()
+  const wink = useWinkIntegration()
+  const roundStartedRef = useRef(false)
   const controllerRef = useRef<GameController | null>(null)
   if (!controllerRef.current) controllerRef.current = new GameController()
   const controller = controllerRef.current
@@ -37,9 +43,39 @@ export default function App() {
   const aiThinking = snapshot.aiThinking
   const difficulty = snapshot.match.difficulty
   const gameStarted = history.length > 0
-  const isDraw = false
+  const isDraw = snapshot.match.isDraw
 
+  const isGameOver = !!winner
   const lastMove = history.length > 0 ? history[history.length - 1].cell : null
+
+  // Start round on first stone placed
+  useEffect(() => {
+    if (gameStarted && !roundStartedRef.current && !isGameOver && !isDraw) {
+      wink.gameplayStart()
+      roundStartedRef.current = true
+    }
+  }, [gameStarted, isGameOver, isDraw, wink])
+
+  // Stop round and submit score on game over or draw
+  useEffect(() => {
+    if ((isGameOver || isDraw) && roundStartedRef.current) {
+      wink.gameplayStop()
+      roundStartedRef.current = false
+      const score = winner?.winner === "X" ? 1000 : (isDraw ? 200 : 50)
+      wink.submitFinalScore({ score })
+      wink.track("match_ended", { winner: winner?.winner || "draw", moves: history.length, mode })
+    }
+  }, [isGameOver, isDraw, winner, history.length, mode, wink])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (roundStartedRef.current) {
+        wink.gameplayStop()
+        roundStartedRef.current = false
+      }
+    }
+  }, [wink])
 
   const winCellSet = useMemo(() => {
     if (!winner) return new Set<string>()
@@ -48,38 +84,50 @@ export default function App() {
 
   const handleCellClick = useCallback(
     (row: number, col: number) => {
+      if (wink.hostPaused) return
       controller.playCell({ row, col })
     },
-    [controller],
+    [controller, wink.hostPaused],
   )
 
-  const handleReplay = useCallback(() => controller.replay(), [controller])
+  const handleReplay = useCallback(() => {
+    if (roundStartedRef.current) {
+      wink.gameplayStop()
+      roundStartedRef.current = false
+    }
+    controller.replay()
+  }, [controller, wink])
 
   const handleNewGame = useCallback((newMode?: GameMode) => {
+    if (roundStartedRef.current) {
+      wink.gameplayStop()
+      roundStartedRef.current = false
+    }
     if (newMode) controller.setMode(newMode)
     else controller.newGame()
-  }, [controller])
+  }, [controller, wink])
 
-  const isGameOver = !!winner
   const currentLanguage = i18n.resolvedLanguage?.startsWith("en") ? "en" : "vi"
   const nextLanguage = currentLanguage === "vi" ? "en" : "vi"
 
   const [displayElapsed, setDisplayElapsed] = useState(0)
   useEffect(() => {
-    if (!gameStarted || isGameOver) return
+    if (!gameStarted || isGameOver || wink.hostPaused) return
     const id = setInterval(() => setDisplayElapsed((e) => e + 1), 1000)
     return () => clearInterval(id)
-  }, [gameStarted, isGameOver])
+  }, [gameStarted, isGameOver, wink.hostPaused])
   useEffect(() => {
     if (!gameStarted) setDisplayElapsed(0)
   }, [gameStarted])
 
   return (
     <div
+      className="caro-app-shell"
       style={{
         display: "flex",
         flexDirection: "column",
-        minHeight: "100%",
+        height: "100dvh",
+        maxHeight: "100dvh",
         maxWidth: 1400,
         margin: "0 auto",
         position: "relative",
@@ -137,9 +185,10 @@ export default function App() {
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "16px 16px 8px",
+          padding: "8px 16px 4px",
           position: "relative",
           zIndex: 1,
+          flexShrink: 0,
         }}
       >
         <button
@@ -185,10 +234,14 @@ export default function App() {
         style={{
           display: "flex",
           justifyContent: "center",
-          padding: "0 16px",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 8,
+          padding: "2px 16px 4px",
           borderBottom: "1px solid var(--divider)",
           position: "relative",
           zIndex: 1,
+          flexShrink: 0,
         }}
       >
         <div style={{ display: "flex", gap: 4 }}>
@@ -205,30 +258,18 @@ export default function App() {
           ))}
         </div>
         {mode === "ai" && (
-          <div
-            style={{ marginLeft: 16, display: "flex", alignItems: "center" }}
-          >
-            <select
-              value={difficulty}
-              onChange={(e) => {
-                controller.setDifficulty(e.target.value as "easy" | "normal" | "hard" | "expert")
-              }}
-              style={{
-                padding: "4px 8px",
-                borderRadius: 4,
-                border: "1px solid var(--divider)",
-                background: "var(--paper)",
-                color: "var(--ink)",
-                fontSize: 13,
-                outline: "none",
-                cursor: "pointer",
-              }}
-            >
-              <option value="easy">{t("game.difficultyEasy")}</option>
-              <option value="normal">{t("game.difficultyNormal")}</option>
-              <option value="hard">{t("game.difficultyHard")}</option>
-              <option value="expert">{t("game.difficultyExpert")}</option>
-            </select>
+          <div className="difficulty-picker" role="group" aria-label={t("game.difficulty")}>
+            {AI_DIFFICULTIES.map((level) => (
+              <button
+                key={level}
+                type="button"
+                className={`difficulty-button ${difficulty === level ? "selected" : ""}`}
+                aria-pressed={difficulty === level}
+                onClick={() => controller.setDifficulty(level)}
+              >
+                {t(`game.difficulty${level.charAt(0).toUpperCase()}${level.slice(1)}`)}
+              </button>
+            ))}
           </div>
         )}
       </div>
@@ -237,15 +278,18 @@ export default function App() {
       <div
         style={{
           display: "block",
-          marginTop: 12,
+          marginTop: 4,
+          marginBottom: 2,
           position: "relative",
           zIndex: 1,
+          flexShrink: 0,
         }}
       >
         <MobilePlayerBar
           mode={mode}
           currentPlayer={currentPlayer}
           isGameOver={isGameOver}
+          elapsed={displayElapsed}
         />
       </div>
 
@@ -255,10 +299,11 @@ export default function App() {
           flex: 1,
           display: "flex",
           flexDirection: "column",
-          gap: 12,
-          padding: "12px 12px 8px",
+          minHeight: 0,
+          padding: "4px 8px",
           position: "relative",
           zIndex: 1,
+          overflow: "hidden",
         }}
         className="main-layout"
       >
@@ -267,8 +312,10 @@ export default function App() {
             flex: 1,
             display: "flex",
             justifyContent: "center",
+            alignItems: "center",
             width: "100%",
-            minHeight: 350,
+            height: "100%",
+            minHeight: 0,
           }}
           className="mobile-board"
         >
@@ -281,14 +328,14 @@ export default function App() {
         </div>
         <div
           className="mobile-info"
-          style={{ display: "flex", gap: 8, flexDirection: "column" }}
+          style={{ display: "none" }}
         >
           <InfoCard mode={mode} elapsed={displayElapsed} compact />
         </div>
       </main>
 
       {/* ── Win Banner ── */}
-      <div style={{ padding: "0 12px 8px", position: "relative", zIndex: 1 }}>
+      <div style={{ padding: "0 12px 4px", position: "relative", zIndex: 1, flexShrink: 0 }}>
         <WinBanner
           winner={winner}
           mode={mode}
@@ -304,9 +351,10 @@ export default function App() {
           display: "flex",
           justifyContent: "center",
           gap: 8,
-          padding: "4px 16px 16px",
+          padding: "4px 16px 10px",
           position: "relative",
           zIndex: 1,
+          flexShrink: 0,
         }}
       >
         {!isGameOver && (

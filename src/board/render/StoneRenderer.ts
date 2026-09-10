@@ -16,8 +16,18 @@ export class StoneRenderer {
       const key = `${row},${col}`; seen.add(key)
       if (this.visuals.has(key)) return
       const visual = new Graphics(); visual.name = `Stone#${key}`; visual.position.set(col * CELL_SIZE + CELL_SIZE / 2, row * CELL_SIZE + CELL_SIZE / 2)
-      if (player === "X") visual.lineStyle(4, 0xa84b2a, 1).moveTo(-12, -12).lineTo(12, 12).moveTo(12, -12).lineTo(-12, 12)
-      else visual.lineStyle(4, 0x315a72, 1).drawCircle(0, 0, 14)
+      if (player === "X") {
+        visual
+          .lineStyle(5.5, 0x9f3f1f, 1)
+          .moveTo(-16, -16).lineTo(16, 16)
+          .moveTo(16, -16).lineTo(-16, 16)
+      } else {
+        visual
+          .beginFill(0xfaf1dc, 0.96)
+          .lineStyle(5, 0x234e69, 1)
+          .drawCircle(0, 0, 17)
+          .endFill()
+      }
       this.container.addChild(visual); this.visuals.set(key, visual)
     })
     for (const [key, visual] of this.visuals) if (!seen.has(key)) { this.container.removeChild(visual); visual.destroy(); this.visuals.delete(key) }

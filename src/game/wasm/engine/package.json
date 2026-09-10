@@ -1,0 +1,15 @@
+{
+  "name": "gomoku-engine",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "gomoku_engine_bg.wasm",
+    "gomoku_engine.js",
+    "gomoku_engine.d.ts"
+  ],
+  "main": "gomoku_engine.js",
+  "types": "gomoku_engine.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

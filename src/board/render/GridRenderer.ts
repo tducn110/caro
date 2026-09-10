@@ -1,22 +1,29 @@
 import { Graphics } from "pixi.js"
 import { CELL_SIZE } from "../spatial/CoordinateTransform"
-import type { CellBounds } from "../spatial/VisibleBounds"
+import { BOARD_MAX_INDEX, BOARD_MIN_INDEX } from "../../game/core/BoardBounds"
 
 export class GridRenderer {
   readonly graphics = new Graphics()
-  private lastBounds: CellBounds | null = null
 
-  draw(bounds: CellBounds): void {
-    if (this.lastBounds && sameBounds(this.lastBounds, bounds)) return
-    this.lastBounds = bounds
-    this.graphics.clear().lineStyle(1, 0x000000, 0.08)
-    const startX = bounds.minCol * CELL_SIZE, endX = bounds.maxCol * CELL_SIZE
-    const startY = bounds.minRow * CELL_SIZE, endY = bounds.maxRow * CELL_SIZE
-    for (let col = bounds.minCol; col <= bounds.maxCol; col++) this.graphics.moveTo(col * CELL_SIZE, startY).lineTo(col * CELL_SIZE, endY)
-    for (let row = bounds.minRow; row <= bounds.maxRow; row++) this.graphics.moveTo(startX, row * CELL_SIZE).lineTo(endX, row * CELL_SIZE)
+  draw(): void {
+    this.graphics.clear()
+    const firstLine = BOARD_MIN_INDEX * CELL_SIZE
+    const lastLine = (BOARD_MAX_INDEX + 1) * CELL_SIZE
+    const boardDimension = lastLine - firstLine
+
+    // Vintage paper board surface
+    this.graphics.lineStyle(2.5, 0x8a6039, 0.65)
+    this.graphics.beginFill(0xfaf1dc, 0.94)
+    this.graphics.drawRoundedRect(firstLine, firstLine, boardDimension, boardDimension, 8)
+    this.graphics.endFill()
+
+    // Inner grid lines
+    this.graphics.lineStyle(1.2, 0x6f5134, 0.3)
+    for (let col = BOARD_MIN_INDEX; col <= BOARD_MAX_INDEX + 1; col++) {
+      this.graphics.moveTo(col * CELL_SIZE, firstLine).lineTo(col * CELL_SIZE, lastLine)
+    }
+    for (let row = BOARD_MIN_INDEX; row <= BOARD_MAX_INDEX + 1; row++) {
+      this.graphics.moveTo(firstLine, row * CELL_SIZE).lineTo(lastLine, row * CELL_SIZE)
+    }
   }
-}
-
-function sameBounds(a: CellBounds, b: CellBounds): boolean {
-  return a.minRow === b.minRow && a.maxRow === b.maxRow && a.minCol === b.minCol && a.maxCol === b.maxCol
 }

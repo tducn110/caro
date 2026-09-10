@@ -7,8 +7,12 @@ import { resolveVisibleBounds, type ViewportSize } from "../board/spatial/Visibl
 import { GridRenderer } from "../board/render/GridRenderer"
 import { HighlightRenderer } from "../board/render/HighlightRenderer"
 import { StoneRenderer } from "../board/render/StoneRenderer"
+import { BOARD_SIZE } from "../game/core/BoardBounds"
+import { CELL_SIZE } from "../board/spatial/CoordinateTransform"
 
 export interface BoardRenderStone { readonly cell: CellCoord; readonly player: Player }
+
+const BOARD_PADDING = 24
 
 export class CaroScene {
   readonly app: Application
@@ -34,7 +38,7 @@ export class CaroScene {
     this.app = new Application({
       view: canvas,
       resizeTo: canvas.parentElement || window,
-      backgroundColor: 0xfcfbf9,
+      backgroundAlpha: 0,
       resolution: window.devicePixelRatio || 1,
       autoDensity: true,
       antialias: true,
@@ -50,7 +54,7 @@ export class CaroScene {
     this.fxLayer.name = "FxLayer"
     this.world.addChild(this.gridLayer, this.fxLayer, this.stoneLayer)
 
-    this.camera.panTo(this.app.screen.width / 2, this.app.screen.height / 2)
+    this.fitBoardToViewport({ width: this.app.screen.width, height: this.app.screen.height })
     this.unsubscribeCamera = this.camera.subscribe(() => {
       this.applyCameraTransform()
       this.refreshVisibleBoard()
@@ -98,7 +102,21 @@ export class CaroScene {
   private refreshViewportIfChanged(): void {
     const viewport = { width: this.app.screen.width, height: this.app.screen.height }
     if (viewport.width === this.lastViewport.width && viewport.height === this.lastViewport.height) return
-    this.refreshVisibleBoard()
+    this.fitBoardToViewport(viewport)
+  }
+
+  /** Keeps every playable cell visible after first render and viewport rotations. */
+  private fitBoardToViewport(viewport: ViewportSize): void {
+    const boardPixels = BOARD_SIZE * CELL_SIZE
+    const padding = viewport.width < 500 ? 10 : BOARD_PADDING
+    const availableWidth = Math.max(1, viewport.width - padding * 2)
+    const availableHeight = Math.max(1, viewport.height - padding * 2)
+    const zoom = Math.min(availableWidth / boardPixels, availableHeight / boardPixels)
+    this.camera.setZoom(zoom)
+    this.camera.panTo(
+      (viewport.width - boardPixels * zoom) / 2,
+      (viewport.height - boardPixels * zoom) / 2,
+    )
   }
 
   /** CAMERA_CHANGED, VIEWPORT_CHANGED and GAME_STATE_CHANGED converge here. */
@@ -106,7 +124,7 @@ export class CaroScene {
     const viewport = { width: this.app.screen.width, height: this.app.screen.height }
     this.lastViewport = viewport
     const bounds = resolveVisibleBounds(this.camera.snapshot(), viewport)
-    this.gridRenderer.draw(bounds)
+    this.gridRenderer.draw()
     this.stoneRenderer.sync({
       forEachStoneInBounds: (visibleBounds, callback) => {
         for (const stone of this.board) {

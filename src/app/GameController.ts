@@ -6,6 +6,7 @@ import type { GameMode } from "../game/behaviors/match/MatchState"
 import { playMove, type PlayMoveResult } from "../game/behaviors/move/PlayMove"
 import { AIController } from "../game/ai/AIController"
 import type { AIService, BotDifficulty } from "../game/ai/contracts"
+import { BOARD_SIZE } from "../game/core/BoardBounds"
 
 export interface BoardStone { readonly cell: CellCoord; readonly player: Player }
 
@@ -58,12 +59,13 @@ export class GameController {
     if (result.type !== "accepted") return result
     this.finishMove(result.win)
     this.notify()
-    if (!result.win && this.match.snapshot().mode === "ai" && this.currentPlayer === "O") this.startAiTurn()
+    if (!result.win && this.match.snapshot().phase === "playing" && this.match.snapshot().mode === "ai" && this.currentPlayer === "O") this.startAiTurn()
     return result
   }
 
   private finishMove(win: WinResult | null): void {
     if (win) this.match.finish(win)
+    else if (this.state.moveCount === BOARD_SIZE * BOARD_SIZE) this.match.finishDraw()
     else this.currentPlayer = this.currentPlayer === "X" ? "O" : "X"
   }
 

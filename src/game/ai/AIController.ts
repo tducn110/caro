@@ -1,16 +1,18 @@
 import type { GameState } from "../core/GameState"
-import type { AIRequest, AIResult, AIService, BotDifficulty } from "./contracts"
-import { SEARCH_BUDGETS } from "./contracts"
-import { SearchPositionBuilder } from "./SearchPositionBuilder"
-import { GomokuEngine } from "../bot"
+import type { AIResult, AIService, BotDifficulty } from "./contracts"
+import { GomokuWasmEngine } from "../wasm/GomokuWasmEngine"
 
 export class AIController implements AIService {
-  private readonly builder = new SearchPositionBuilder(25)
-  private readonly engine = new GomokuEngine()
+  private readonly engine = new GomokuWasmEngine()
   private nextRequestId = 0
 
   requestMove(state: GameState, roundId: number, difficulty: BotDifficulty): Promise<AIResult> {
-    const request: AIRequest = { requestId: ++this.nextRequestId, roundId, position: this.builder.build(state), difficulty, budget: SEARCH_BUDGETS[difficulty] }
+    const request = {
+      requestId: ++this.nextRequestId,
+      roundId,
+      difficulty,
+      history: state.getHistory().map((move) => ({ ...move, cell: { ...move.cell } })),
+    }
     return this.engine.search(request)
   }
 

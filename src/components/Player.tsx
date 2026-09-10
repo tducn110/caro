@@ -138,10 +138,12 @@ export const MobilePlayerBar = memo(function MobilePlayerBar({
   mode,
   currentPlayer,
   isGameOver,
+  elapsed,
 }: {
   mode: GameMode
   currentPlayer: Player
   isGameOver: boolean
+  elapsed?: number
 }) {
   const { t } = useTranslation()
   const p1label = mode === "ai" ? t("game.you") : t("game.player", { number: 1 })
@@ -152,7 +154,7 @@ export const MobilePlayerBar = memo(function MobilePlayerBar({
   return (
     <div
       className="paper-card mx-3 flex items-center gap-1"
-      style={{ padding: "8px 12px", borderRadius: "var(--radius-sm)" }}
+      style={{ padding: "6px 10px", borderRadius: "var(--radius-sm)" }}
     >
       <div
         style={{
@@ -160,7 +162,7 @@ export const MobilePlayerBar = memo(function MobilePlayerBar({
           display: "flex",
           alignItems: "center",
           gap: 8,
-          padding: "6px 10px",
+          padding: "5px 8px",
           borderRadius: 6,
           background: activeX ? "rgba(168,75,42,0.10)" : "transparent",
           borderLeft: activeX
@@ -217,17 +219,40 @@ export const MobilePlayerBar = memo(function MobilePlayerBar({
         )}
       </div>
 
-      <span
-        className="font-display"
+      <div
         style={{
-          fontSize: 11,
-          color: "var(--ink-muted)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 1,
           flexShrink: 0,
-          padding: "0 4px",
+          padding: "0 6px",
         }}
       >
-        VS
-      </span>
+        <span
+          className="font-display"
+          style={{
+            fontSize: 11,
+            color: "var(--ink-muted)",
+            fontWeight: 700,
+          }}
+        >
+          VS
+        </span>
+        {elapsed !== undefined && (
+          <span
+            style={{
+              fontSize: 10,
+              fontFamily: "monospace",
+              color: "var(--ink-muted)",
+              fontWeight: 600,
+              letterSpacing: "0.02em",
+            }}
+          >
+            {`${Math.floor(elapsed / 60).toString().padStart(2, "0")}:${(elapsed % 60).toString().padStart(2, "0")}`}
+          </span>
+        )}
+      </div>
 
       <div
         style={{

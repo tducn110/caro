@@ -42,7 +42,19 @@ export function CaroGameCanvas({
       })()
     }
 
+    let resizeObserver: ResizeObserver | null = null
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(() => {
+        if (sceneRef.current) {
+          sceneRef.current.app.resize()
+          sceneRef.current.refreshVisibleBoard()
+        }
+      })
+      resizeObserver.observe(containerRef.current)
+    }
+
     return () => {
+      resizeObserver?.disconnect()
       scene.destroy()
       if (containerRef.current?.contains(canvas)) {
         containerRef.current.removeChild(canvas)
@@ -68,12 +80,9 @@ export function CaroGameCanvas({
       style={{
         width: "100%",
         height: "100%",
-        minHeight: "400px",
+        minHeight: 0,
         overflow: "hidden",
         position: "relative",
-        borderRadius: 4,
-        borderTop: "3px solid var(--paper-deep)",
-        borderLeft: "1px solid var(--grid-line)",
         touchAction: "none",
       }}
     />

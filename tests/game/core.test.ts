@@ -11,15 +11,19 @@ describe("GameState & Rules Core", () => {
     state = new GameState();
   });
 
-  it("board coordinate storage: can set and get pieces at negative and positive coordinates", () => {
+  it("board coordinate storage: accepts cells within the fixed 15 by 15 board", () => {
     playMove(state, winRule, { player: "X", cell: { row: 0, col: 0 } });
-    playMove(state, winRule, { player: "O", cell: { row: -10, col: -20 } });
-    playMove(state, winRule, { player: "X", cell: { row: 381, col: -92 } });
+    playMove(state, winRule, { player: "O", cell: { row: 14, col: 14 } });
 
     expect(state.get({ row: 0, col: 0 })).toBe("X");
-    expect(state.get({ row: -10, col: -20 })).toBe("O");
-    expect(state.get({ row: 381, col: -92 })).toBe("X");
+    expect(state.get({ row: 14, col: 14 })).toBe("O");
     expect(state.get({ row: 1, col: 1 })).toBeNull(); // Empty cell
+  });
+
+  it("rejects cells outside the fixed 15 by 15 board", () => {
+    expect(playMove(state, winRule, { player: "X", cell: { row: -1, col: 0 } })).toEqual({ type: "rejected", reason: "out-of-bounds" });
+    expect(playMove(state, winRule, { player: "X", cell: { row: 0, col: 15 } })).toEqual({ type: "rejected", reason: "out-of-bounds" });
+    expect(state.moveCount).toBe(0);
   });
 
   it("make move: successfully records history and updates bounds", () => {
@@ -28,9 +32,9 @@ describe("GameState & Rules Core", () => {
     expect(state.getHistory()[0]).toEqual({ player: "X", cell: { row: 0, col: 0 }, index: 1 });
     expect(state.occupiedBounds).toEqual({ minRow: 0, maxRow: 0, minCol: 0, maxCol: 0 });
 
-    playMove(state, winRule, { player: "O", cell: { row: 5, col: -5 } });
+    playMove(state, winRule, { player: "O", cell: { row: 5, col: 5 } });
     expect(state.getHistory().length).toBe(2);
-    expect(state.occupiedBounds).toEqual({ minRow: 0, maxRow: 5, minCol: -5, maxCol: 0 });
+    expect(state.occupiedBounds).toEqual({ minRow: 0, maxRow: 5, minCol: 0, maxCol: 5 });
   });
 
   it("make move: occupied cell rejection", () => {
@@ -68,17 +72,17 @@ describe("GameState & Rules Core", () => {
     }
   });
 
-  it("win detection: diagonal checking with negative coordinates", () => {
-    // O at (0,0), (-1,-1), (-2,-2), (-3,-3), (-4,-4)
-    playMove(state, winRule, { player: "O", cell: { row: 0, col: 0 } });
-    playMove(state, winRule, { player: "O", cell: { row: -1, col: -1 } });
-    playMove(state, winRule, { player: "O", cell: { row: -2, col: -2 } });
-    const m4 = playMove(state, winRule, { player: "O", cell: { row: -3, col: -3 } });
+  it("win detection: diagonal checking near the board edge", () => {
+    // O at (10,10), (11,11), (12,12), (13,13), (14,14)
+    playMove(state, winRule, { player: "O", cell: { row: 10, col: 10 } });
+    playMove(state, winRule, { player: "O", cell: { row: 11, col: 11 } });
+    playMove(state, winRule, { player: "O", cell: { row: 12, col: 12 } });
+    const m4 = playMove(state, winRule, { player: "O", cell: { row: 13, col: 13 } });
     if (m4.type === "accepted") {
       expect(m4.win).toBeNull();
     }
 
-    const m5 = playMove(state, winRule, { player: "O", cell: { row: -4, col: -4 } });
+    const m5 = playMove(state, winRule, { player: "O", cell: { row: 14, col: 14 } });
     expect(m5.type).toBe("accepted");
     if (m5.type === "accepted") {
       expect(m5.win).not.toBeNull();
@@ -86,4 +90,3 @@ describe("GameState & Rules Core", () => {
     }
   });
 });
-

@@ -17,12 +17,30 @@ import { WinBanner } from "./components/WinBanner"
 import { InfoCard } from "./components/Info"
 import type { BotDifficulty } from "./game/ai/contracts"
 import { useWinkIntegration } from "./integrations/wink/useWinkIntegration"
+import { preloadCriticalResources, preloadNonCriticalResources } from "./utils/game-loader";
+import { completeGameLoading, onGameLoadingDismiss, setGameLoadingProgress } from "./utils/loading-controller";
+
 
 // ── Main App ─────────────────────────────────────────────────────────────────
 
 const AI_DIFFICULTIES: readonly BotDifficulty[] = ["easy", "normal", "hard", "expert"]
 
 export default function App() {
+  // Unified PapaStudio loading screen lifecycle barrier
+  useEffect(() => {
+    setGameLoadingProgress(25);
+    const criticalPromise = preloadCriticalResources((pct) => {
+      setGameLoadingProgress(Math.min(95, pct));
+    });
+    void Promise.allSettled([criticalPromise]).then(() => {
+      completeGameLoading();
+    });
+    const unbind = onGameLoadingDismiss(() => {
+      preloadNonCriticalResources();
+    });
+    return unbind;
+  }, []);
+
   const { t, i18n } = useTranslation()
   const wink = useWinkIntegration()
   const roundStartedRef = useRef(false)

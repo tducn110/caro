@@ -1,6 +1,7 @@
 import type { CellCoord } from "../core/types"
 
-export type BotDifficulty = "easy" | "normal" | "hard" | "expert"
+/** Matches the five public difficulty values accepted by the Gomoku WASM API. */
+export type BotDifficulty = "easy" | "normal" | "hard" | "expert" | "master"
 
 export interface SearchPosition {
   size: number
@@ -31,6 +32,7 @@ export const SEARCH_BUDGETS: Record<BotDifficulty, SearchBudget> = {
   normal: { timeMs: 150, maxDepth: 4 },
   hard: { timeMs: 500, maxDepth: 8 },
   expert: { timeMs: 1200, maxDepth: 64 },
+  master: { timeMs: 1800, maxDepth: 64 },
 }
 
 export interface AIService {

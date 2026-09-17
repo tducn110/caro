@@ -19,3 +19,4 @@ logs/
 /.plugins/
 /.opencode-skills/
 .vercel
+repomix-output.xml

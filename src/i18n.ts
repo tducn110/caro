@@ -1,7 +1,7 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 
-const LANGUAGE_STORAGE_KEY = "fruit-slashing-language";
+const LANGUAGE_STORAGE_KEY = "10-caro-language";
 type SupportedLanguage = "vi" | "en";
 const isSupportedLanguage = (value: string | null): value is SupportedLanguage =>
   value === "vi" || value === "en";
@@ -9,14 +9,20 @@ const isSupportedLanguage = (value: string | null): value is SupportedLanguage =
 // Language is intentionally controlled by this app, not by the browser or OS.
 // English is the first-visit default; a valid saved choice wins on reload.
 const getInitialLanguage = (): SupportedLanguage => {
-  if (typeof window === "undefined") return "en";
-
+  if (typeof window === 'undefined') return 'en';
   try {
     const value = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
-    return isSupportedLanguage(value) ? value : "en";
+    if (isSupportedLanguage(value)) return value;
   } catch {
-    return "en";
+    // Storage read failure fallback
   }
+  // Contract: Wink-hosted initial language = Wink.locale if supported, otherwise English.
+  const winkLocale = (window as any).Wink?.locale;
+  if (typeof winkLocale === 'string') {
+    const normalized = winkLocale.split('-')[0];
+    if (isSupportedLanguage(normalized)) return normalized;
+  }
+  return 'en';
 };
 
 const persistLanguage = (language: string): void => {

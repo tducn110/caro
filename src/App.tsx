@@ -6,8 +6,10 @@ import {
   LogOut,
   RotateCcw,
   SquarePlus,
+  Trophy,
   UsersRound,
 } from "lucide-react"
+import { LeaderboardModal } from "./components/LeaderboardModal"
 import { useTranslation } from "react-i18next"
 import type { GameMode } from "./game/behaviors/match/MatchState"
 import { GameController } from "./app/GameController"
@@ -26,23 +28,26 @@ import { completeGameLoading, onGameLoadingDismiss, setGameLoadingProgress } fro
 const AI_DIFFICULTIES: readonly BotDifficulty[] = ["easy", "normal", "hard", "expert"]
 
 export default function App() {
+  const { t, i18n } = useTranslation()
+  const [showLeaderboard, setShowLeaderboard] = useState(false)
+  const wink = useWinkIntegration()
+
   // Unified PapaStudio loading screen lifecycle barrier
   useEffect(() => {
     setGameLoadingProgress(25);
     const criticalPromise = preloadCriticalResources((pct) => {
       setGameLoadingProgress(Math.min(95, pct));
     });
-    void Promise.allSettled([criticalPromise]).then(() => {
+    const winkPromise = wink.readyPromise ?? Promise.resolve(null);
+    void Promise.allSettled([criticalPromise, winkPromise]).then(() => {
       completeGameLoading();
     });
     const unbind = onGameLoadingDismiss(() => {
       preloadNonCriticalResources();
     });
     return unbind;
-  }, []);
+  }, [wink.readyPromise]);
 
-  const { t, i18n } = useTranslation()
-  const wink = useWinkIntegration()
   const roundStartedRef = useRef(false)
   const controllerRef = useRef<GameController | null>(null)
   if (!controllerRef.current) controllerRef.current = new GameController()
@@ -53,6 +58,11 @@ export default function App() {
     () => controller.snapshot(),
   )
   useEffect(() => () => controller.destroy(), [controller])
+
+  // Propagate host pause to controller
+  useEffect(() => {
+    controller.setPaused(wink.hostPaused)
+  }, [controller, wink.hostPaused])
 
   const history = snapshot.history
   const currentPlayer = snapshot.currentPlayer
@@ -81,9 +91,8 @@ export default function App() {
       roundStartedRef.current = false
       const score = winner?.winner === "X" ? 1000 : (isDraw ? 200 : 50)
       wink.submitFinalScore({ score })
-      wink.track("match_ended", { winner: winner?.winner || "draw", moves: history.length, mode })
     }
-  }, [isGameOver, isDraw, winner, history.length, mode, wink])
+  }, [isGameOver, isDraw, winner, wink])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -236,15 +245,26 @@ export default function App() {
           </h1>
         </div>
 
-        <button
-          className="paper-btn"
-          style={{ padding: "6px 10px", fontSize: 12 }}
-          aria-label={t("settings.language")}
-          onClick={() => void i18n.changeLanguage(nextLanguage)}
-        >
-          <Globe size={14} />
-          <span>{nextLanguage.toUpperCase()}</span>
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <button
+            className="paper-btn"
+            style={{ padding: "6px 10px", fontSize: 12 }}
+            aria-label={t("leaderboard.title", "Bảng xếp hạng")}
+            onClick={() => setShowLeaderboard(true)}
+          >
+            <Trophy size={14} color="var(--x-color)" />
+          </button>
+
+          <button
+            className="paper-btn"
+            style={{ padding: "6px 10px", fontSize: 12 }}
+            aria-label={t("settings.language")}
+            onClick={() => void i18n.changeLanguage(nextLanguage)}
+          >
+            <Globe size={14} />
+            <span>{nextLanguage.toUpperCase()}</span>
+          </button>
+        </div>
       </header>
 
       {/* ── Mode Tabs ── */}
@@ -342,6 +362,7 @@ export default function App() {
             lastMove={lastMove}
             winCellSet={winCellSet}
             onCellClick={handleCellClick}
+            paused={wink.hostPaused}
           />
         </div>
         <div
@@ -400,6 +421,10 @@ export default function App() {
           <span>{t("common.close")}</span>
         </button>
       </footer>
+
+      {showLeaderboard && (
+        <LeaderboardModal wink={wink} onClose={() => setShowLeaderboard(false)} />
+      )}
     </div>
   )
 }

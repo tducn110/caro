@@ -13,6 +13,7 @@ export const WASM_DIFFICULTIES: Record<BotDifficulty, number> = {
   normal: 1,
   hard: 2,
   expert: 3,
+  master: 4,
 }
 
 export const WASM_SEARCH_DEPTHS: Record<BotDifficulty, number> = {
@@ -20,6 +21,7 @@ export const WASM_SEARCH_DEPTHS: Record<BotDifficulty, number> = {
   normal: 2,
   hard: 4,
   expert: 6,
+  master: 8,
 }
 
 export type WasmAIResult = AIResult

@@ -14,6 +14,7 @@ export interface GameSnapshot {
   readonly match: ReturnType<MatchController["snapshot"]>
   readonly currentPlayer: Player
   readonly aiThinking: boolean
+  readonly paused: boolean
   readonly board: readonly BoardStone[]
   readonly history: readonly Move[]
   readonly lastMove: Move | null
@@ -26,6 +27,7 @@ export class GameController {
   private readonly ai: AIService
   private currentPlayer: Player = "X"
   private aiThinking = false
+  private paused = false
   private turnToken = 0
   private listeners = new Set<() => void>()
   private cachedSnapshot: GameSnapshot
@@ -40,7 +42,7 @@ export class GameController {
     const board: BoardStone[] = []
     this.state.forEachStone((cell, player) => board.push({ cell: { ...cell }, player }))
     const lastMove = history[history.length - 1] ?? null
-    return { match: this.match.snapshot(), currentPlayer: this.currentPlayer, aiThinking: this.aiThinking, board, history, lastMove }
+    return { match: this.match.snapshot(), currentPlayer: this.currentPlayer, aiThinking: this.aiThinking, paused: this.paused, board, history, lastMove }
   }
 
   snapshot(): GameSnapshot { return this.cachedSnapshot }
@@ -48,6 +50,7 @@ export class GameController {
   private notify(): void { this.cachedSnapshot = this.makeSnapshot(); this.listeners.forEach((listener) => listener()) }
 
   playCell(cell: CellCoord): PlayMoveResult {
+    if (this.paused) return { type: "rejected", reason: "paused" }
     const current = this.match.snapshot()
     if (current.phase === "setup" || current.phase === "ready") this.match.startRound()
     const playing = this.match.snapshot()
@@ -103,6 +106,20 @@ export class GameController {
     this.notify()
   }
 
+  /** Freezes game-owned input and an active AI turn without ending the round. */
+  setPaused(paused: boolean): void {
+    if (this.paused === paused) return
+    this.paused = paused
+    if (paused) this.invalidateAiTurn()
+    this.notify()
+    if (!paused) {
+      const match = this.match.snapshot()
+      if (match.phase === "playing" && match.mode === "ai" && this.currentPlayer === "O") {
+        this.startAiTurn()
+      }
+    }
+  }
+
   destroy(): void { this.invalidateAiTurn(); this.ai.destroy() }
 
   private invalidateAiTurn(): void {
@@ -112,6 +129,7 @@ export class GameController {
   }
 
   private startAiTurn(): void {
+    if (this.paused) return
     const token = ++this.turnToken
     const roundId = this.match.snapshot().roundId
     const difficulty = this.match.snapshot().difficulty
@@ -119,7 +137,7 @@ export class GameController {
     this.notify()
     void this.ai.requestMove(this.state, roundId, difficulty).then((result) => {
       const current = this.match.snapshot()
-      if (token !== this.turnToken || result.roundId !== current.roundId || current.phase !== "playing" || current.mode !== "ai" || this.currentPlayer !== "O") return
+      if (token !== this.turnToken || this.paused || result.roundId !== current.roundId || current.phase !== "playing" || current.mode !== "ai" || this.currentPlayer !== "O") return
       this.aiThinking = false
       if (result.move) {
         const moveResult = playMove(this.state, this.winRule, { player: "O", cell: result.move })

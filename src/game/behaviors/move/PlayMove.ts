@@ -4,7 +4,7 @@ import type { WinRule } from "../../core/WinRules"
 import type { CellCoord, Move, Player, WinResult } from "../../core/types"
 
 export interface PlayMoveRequest { player: Player; cell: CellCoord }
-export type PlayMoveRejection = "occupied" | "out-of-bounds" | "wrong-turn" | "match-ended" | "input-locked"
+export type PlayMoveRejection = "occupied" | "out-of-bounds" | "wrong-turn" | "match-ended" | "input-locked" | "paused"
 export type PlayMoveResult =
   | { type: "accepted"; move: Move; win: WinResult | null }
   | { type: "rejected"; reason: PlayMoveRejection }

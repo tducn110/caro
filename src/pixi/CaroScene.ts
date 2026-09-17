@@ -32,6 +32,7 @@ export class CaroScene {
   private lastMove: CellCoord | null = null
   private winCellSet: ReadonlySet<string> = new Set()
   private lastViewport: ViewportSize = { width: 0, height: 0 }
+  private paused = false
   private readonly unsubscribeCamera: () => void
 
   constructor(canvas: HTMLCanvasElement) {
@@ -68,13 +69,16 @@ export class CaroScene {
     this.app.stage.eventMode = "static"
     this.app.stage.hitArea = { contains: () => true } as any
     this.app.stage.on("pointerdown", (event: FederatedPointerEvent) => {
+      if (this.paused) return
       this.inputController.pointerDown(event.global.x, event.global.y)
     })
     this.app.stage.on("pointermove", (event: FederatedPointerEvent) => {
+      if (this.paused) return
       const gesture = this.inputController.pointerMove(event.global.x, event.global.y)
       if (gesture?.type === "PAN") this.camera.panBy(gesture.dx, gesture.dy)
     })
     const handlePointerUp = (event: FederatedPointerEvent) => {
+      if (this.paused) return
       const gesture = this.inputController.pointerUp(event.global.x, event.global.y, this.camera.snapshot())
       if (gesture?.type === "CELL_TAP") this.onCellClick?.(gesture.cell.row, gesture.cell.col)
     }
@@ -97,6 +101,17 @@ export class CaroScene {
     this.lastMove = lastMove
     this.winCellSet = winCellSet
     this.refreshVisibleBoard()
+  }
+
+  /** The host can pause a live round without destroying its Pixi scene. */
+  setPaused(paused: boolean): void {
+    if (this.paused === paused) return
+    this.paused = paused
+    if (paused) this.app.stop()
+    else {
+      this.app.start()
+      this.refreshVisibleBoard()
+    }
   }
 
   private refreshViewportIfChanged(): void {

@@ -8,6 +8,7 @@ interface CaroGameCanvasProps {
   lastMove: CellCoord | null
   winCellSet: ReadonlySet<string>
   onCellClick: (r: number, c: number) => void
+  paused: boolean
 }
 
 export function CaroGameCanvas({
@@ -15,6 +16,7 @@ export function CaroGameCanvas({
   lastMove,
   winCellSet,
   onCellClick,
+  paused,
 }: CaroGameCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const sceneRef = useRef<CaroScene | null>(null)
@@ -73,6 +75,10 @@ export function CaroGameCanvas({
       sceneRef.current.onCellClick = onCellClick
     }
   }, [onCellClick])
+
+  useEffect(() => {
+    sceneRef.current?.setPaused(paused)
+  }, [paused])
 
   return (
     <div

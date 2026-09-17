@@ -185,7 +185,7 @@ export function LeaderboardModal({ wink, onClose }: Props) {
                       color: "var(--x-color)",
                     }}
                   >
-                    {entry.score.toLocaleString("vi-VN")}
+                    {entry.score.toLocaleString()}
                   </span>
                 </div>
               )
@@ -223,7 +223,7 @@ export function LeaderboardModal({ wink, onClose }: Props) {
             </span>
           </div>
           <span style={{ fontSize: 14, fontWeight: 700, color: "var(--ink)" }}>
-            {personalBestScore.toLocaleString("vi-VN")}
+            {personalBestScore.toLocaleString()}
           </span>
         </div>
 

@@ -16,13 +16,14 @@ const getInitialLanguage = (): SupportedLanguage => {
   } catch {
     // Storage read failure fallback
   }
-  // Contract: Wink-hosted initial language = Wink.locale if supported, otherwise English.
-  const winkLocale = (window as any).Wink?.locale;
-  if (typeof winkLocale === 'string') {
-    const normalized = winkLocale.split('-')[0];
-    if (isSupportedLanguage(normalized)) return normalized;
-  }
+  
   return 'en';
+};
+
+const syncDocumentLang = (lang: string) => {
+  if (typeof document !== "undefined" && document.documentElement) {
+    document.documentElement.lang = lang;
+  }
 };
 
 const persistLanguage = (language: string): void => {
@@ -46,6 +47,15 @@ const resources = {
         back: "Quay lại",
         close: "Đóng",
         retry: "Chơi lại",
+        loading: "Đang tải...",
+      },
+      leaderboard: {
+        title: "BẢNG XẾP HẠNG",
+        empty: "Chưa có điểm số nào",
+      },
+      player: {
+        you: "Bạn",
+        anonymous: "Người chơi",
       },
       settings: {
         title: "Cài đặt",
@@ -94,6 +104,15 @@ const resources = {
         back: "Back",
         close: "Close",
         retry: "Play again",
+        loading: "Loading...",
+      },
+      leaderboard: {
+        title: "LEADERBOARD",
+        empty: "No scores yet",
+      },
+      player: {
+        you: "You",
+        anonymous: "Player",
       },
       settings: {
         title: "Settings",
@@ -144,6 +163,10 @@ void i18n
     fallbackLng: "en",
     interpolation: { escapeValue: false },
   });
-i18n.on("languageChanged", persistLanguage);
+syncDocumentLang(i18n.language || "en");
+i18n.on("languageChanged", (lng) => {
+  persistLanguage(lng);
+  syncDocumentLang(lng);
+});
 
 export default i18n;
